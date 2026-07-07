@@ -70,6 +70,13 @@
             <version>2.3.232</version>
         </dependency>
 
+        <!-- account-deletion saga: consume PURGE_USER_CONTENT, confirm on usercollections-events -->
+        <dependency>
+            <groupId>org.apache.kafka</groupId>
+            <artifactId>kafka-clients</artifactId>
+            <version>3.8.1</version>
+        </dependency>
+
         <dependency>
             <groupId>io.helidon.webserver.testing.junit5</groupId>
             <artifactId>helidon-webserver-testing-junit5</artifactId>

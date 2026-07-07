@@ -1,7 +1,9 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jrobertgardzinski.collections.application.CollectionStore;
 import com.jrobertgardzinski.collections.application.ListItems;
+import com.jrobertgardzinski.collections.application.PurgeUserItems;
 import com.jrobertgardzinski.collections.application.RemoveItem;
 import com.jrobertgardzinski.collections.application.SaveItem;
 import io.helidon.webserver.WebServer;
@@ -31,6 +33,15 @@ public final class Main {
 
         CollectionsApi collections = new CollectionsApi(
                 new SaveItem(store), new RemoveItem(store), new ListItems(store), gate);
+
+        // the account-deletion saga's third participant: consume purge commands off Kafka when a
+        // broker is configured (on a daemon virtual thread); without one, this simply never runs
+        String bootstrap = System.getenv().getOrDefault("KAFKA_BOOTSTRAP_SERVERS", "").trim();
+        if (!bootstrap.isEmpty()) {
+            PurgeCommandsConsumer consumer =
+                    new PurgeCommandsConsumer(new PurgeUserItems(store), new ObjectMapper());
+            Thread.ofVirtual().name("purge-consumer").start(() -> consumer.run(bootstrap));
+        }
 
         WebServer server = WebServer.builder()
                 .port(port)
