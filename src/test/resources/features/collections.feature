@@ -32,6 +32,7 @@ Feature: A user's collections of saved references
     When alice removes meme 42 from "favourites"
     Then the removal reports it was not there
 
+  @saga
   Scenario: Deleting the account purges every collection
     Given alice has saved meme 42 into "favourites"
     And alice has saved comment 7 into "watchlist"

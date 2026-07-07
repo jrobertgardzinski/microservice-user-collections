@@ -1,4 +1,4 @@
-package com.jrobertgardzinski.collections;
+package com.jrobertgardzinski.collections.appsteps;
 
 import com.jrobertgardzinski.collections.application.ListItems;
 import com.jrobertgardzinski.collections.application.PurgeUserItems;
