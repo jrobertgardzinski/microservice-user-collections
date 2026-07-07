@@ -46,6 +46,7 @@ public final class Main {
         WebServer server = WebServer.builder()
                 .port(port)
                 .routing(routing -> routing
+                        .addFilter(new CorrelationFilter())
                         .get("/health", (req, res) -> res.send("OK"))
                         .get("/metrics", MetricsEndpoint::handle)
                         .register("/collections", collections))

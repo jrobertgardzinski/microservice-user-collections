@@ -9,13 +9,15 @@ import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.header.Header;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.Properties;
-import java.util.logging.Logger;
 
 /**
  * This service's side of the account-deletion saga. It consumes {@code content-commands} (the
@@ -30,7 +32,7 @@ public class PurgeCommandsConsumer {
     static final String EVENTS_TOPIC = "usercollections-events";
     static final String CID_HEADER = "X-Correlation-Id";
 
-    private static final Logger LOG = Logger.getLogger(PurgeCommandsConsumer.class.getName());
+    private static final Logger LOG = LoggerFactory.getLogger(PurgeCommandsConsumer.class);
 
     private final PurgeUserItems purgeUserItems;
     private final ObjectMapper mapper;
@@ -50,7 +52,7 @@ public class PurgeCommandsConsumer {
         try {
             command = mapper.readTree(commandPayload);
         } catch (Exception malformed) {
-            LOG.warning("dropping malformed command: " + commandPayload);
+            LOG.warn("dropping malformed command: " + commandPayload);
             return Optional.empty();
         }
         if (!"PURGE_USER_CONTENT".equals(command.path("type").asText())) {
@@ -83,19 +85,26 @@ public class PurgeCommandsConsumer {
                 ConsumerRecords<String, String> records = consumer.poll(Duration.ofSeconds(1));
                 for (ConsumerRecord<String, String> record : records) {
                     String cid = header(record, CID_HEADER);
-                    handle(record.value()).ifPresent(confirmation -> {
-                        ProducerRecord<String, String> out =
-                                new ProducerRecord<>(EVENTS_TOPIC, record.key(), confirmation);
-                        if (cid != null) {
-                            out.headers().add(CID_HEADER, cid.getBytes(StandardCharsets.UTF_8));
-                        }
-                        producer.send(out);
-                    });
+                    if (cid != null) {
+                        MDC.put("cid", cid);   // continue the trace the deletion request started
+                    }
+                    try {
+                        handle(record.value()).ifPresent(confirmation -> {
+                            ProducerRecord<String, String> out =
+                                    new ProducerRecord<>(EVENTS_TOPIC, record.key(), confirmation);
+                            if (cid != null) {
+                                out.headers().add(CID_HEADER, cid.getBytes(StandardCharsets.UTF_8));
+                            }
+                            producer.send(out);
+                        });
+                    } finally {
+                        MDC.remove("cid");
+                    }
                 }
                 consumer.commitSync();
             }
         } catch (Exception broken) {
-            LOG.warning("purge consumer stopped: " + broken.getMessage());
+            LOG.warn("purge consumer stopped: " + broken.getMessage());
         }
     }
 

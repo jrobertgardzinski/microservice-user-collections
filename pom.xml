@@ -34,10 +34,21 @@
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
         </dependency>
+        <!-- log through SLF4J/Logback so the correlation id rides every line via MDC (%X{cid}),
+             matching the other services; Helidon's own logs route here too -->
         <dependency>
             <groupId>io.helidon.logging</groupId>
-            <artifactId>helidon-logging-jul</artifactId>
+            <artifactId>helidon-logging-slf4j</artifactId>
             <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
+            <version>1.5.12</version>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
         </dependency>
 
         <!-- persistence: a connection pool, Flyway migrations, Postgres in prod, H2 (PG mode) for
