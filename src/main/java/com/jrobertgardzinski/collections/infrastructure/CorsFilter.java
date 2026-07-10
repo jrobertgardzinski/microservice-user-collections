@@ -23,7 +23,10 @@ import java.util.stream.Collectors;
  */
 final class CorsFilter implements Filter {
 
-    private static final String DEFAULT_ORIGINS = "http://localhost:8093,http://localhost:5173";
+    // the favourites UI (8093 + its dev server 5173) and the meme gallery (8083), whose star
+    // button saves/removes favourites straight from the browser
+    private static final String DEFAULT_ORIGINS =
+            "http://localhost:8093,http://localhost:5173,http://localhost:8083";
 
     private final Set<String> allowedOrigins;
 
