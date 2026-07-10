@@ -1,0 +1,26 @@
+name: CI
+
+# microservice-user-collections is self-contained (no sibling SNAPSHOTs), so it builds and tests
+# on its own — fast per-push feedback without the whole workspace reactor. The reactor CI (in the
+# aggregator repo) still validates it together with everything else, including the pact this build
+# generates for microservice-security.
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Build and test
+        run: mvn -B --no-transfer-progress clean verify

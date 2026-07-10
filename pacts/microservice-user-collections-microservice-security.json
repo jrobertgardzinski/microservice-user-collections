@@ -1,0 +1,57 @@
+{
+  "consumer": {
+    "name": "microservice-user-collections"
+  },
+  "messages": [
+    {
+      "contents": {
+        "email": "leaver@example.com",
+        "sagaId": "e2490de5-5bd3-43d5-b7c4-526e33f71304",
+        "type": "PURGE_USER_CONTENT"
+      },
+      "description": "a purge user content command",
+      "generators": {
+        "body": {
+          "$.sagaId": {
+            "type": "Uuid"
+          }
+        }
+      },
+      "matchingRules": {
+        "body": {
+          "$.email": {
+            "combine": "AND",
+            "matchers": [
+              {
+                "match": "type"
+              }
+            ]
+          },
+          "$.sagaId": {
+            "combine": "AND",
+            "matchers": [
+              {
+                "match": "regex",
+                "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+              }
+            ]
+          }
+        }
+      },
+      "metaData": {
+        "contentType": "application/json"
+      }
+    }
+  ],
+  "metadata": {
+    "pact-jvm": {
+      "version": "4.6.17"
+    },
+    "pactSpecification": {
+      "version": "3.0.0"
+    }
+  },
+  "provider": {
+    "name": "microservice-security"
+  }
+}

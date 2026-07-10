@@ -66,7 +66,9 @@ public class PurgeCommandsConsumer {
             return Optional.of(mapper.writeValueAsString(mapper.createObjectNode()
                     .put("type", "USER_CONTENT_PURGED")
                     .put("sagaId", sagaId)
-                    .put("email", email)));
+                    .put("email", email)
+                    // envelope version (workspace ADR 0004): fields only ever added within version 1
+                    .put("version", 1)));
         } catch (Exception impossible) {
             throw new IllegalStateException("could not build confirmation", impossible);
         }
