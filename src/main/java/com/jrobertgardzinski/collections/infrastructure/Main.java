@@ -46,6 +46,8 @@ public final class Main {
         WebServer server = WebServer.builder()
                 .port(port)
                 .routing(routing -> routing
+                        // CORS first: a preflight is answered before anything else runs
+                        .addFilter(CorsFilter.fromEnv(System.getenv("COLLECTIONS_ALLOWED_ORIGINS")))
                         .addFilter(new CorrelationFilter())
                         .get("/health", (req, res) -> res.send("OK"))
                         .get("/metrics", MetricsEndpoint::handle)
