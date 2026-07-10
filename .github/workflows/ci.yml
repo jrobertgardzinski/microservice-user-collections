@@ -1,6 +1,6 @@
 name: CI
 
-# microservice-user-collections has no sibling SNAPSHOTs, but checkouts still use the workspace
+# microservice-user-collections needs one sibling SNAPSHOT (offline-jwt, public); checkouts use the workspace
 # layout (each repo in its own directory) because the saga-confirmation provider test verifies
 # microservice-security's committed pact from the sibling checkout. The reactor CI (in the
 # aggregator repo) still validates everything together.
@@ -23,11 +23,17 @@ jobs:
         with:
           repository: jrobertgardzinski/microservice-security
           path: microservice-security
+      - uses: actions/checkout@v4
+        with:
+          repository: jrobertgardzinski/offline-jwt
+          path: offline-jwt
       - name: Set up JDK 25
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '25'
           cache: maven
+      - name: Install the offline-jwt library
+        run: mvn -B -q --no-transfer-progress -f offline-jwt/pom.xml install -DskipTests
       - name: Build and test (including pact provider verification)
         run: mvn -B --no-transfer-progress -f microservice-user-collections/pom.xml clean verify

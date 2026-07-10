@@ -122,6 +122,13 @@
             <version>${junit-suite.version}</version>
             <scope>test</scope>
         </dependency>
+        <!-- the shared offline verification of security's access tokens (was a local copy;
+             the five twins converged into the library) -->
+        <dependency>
+            <groupId>com.jrobertgardzinski</groupId>
+            <artifactId>offline-jwt</artifactId>
+            <version>1.0.0-SNAPSHOT</version>
+        </dependency>
         <!-- consumer-driven contract: the pact test states which saga commands this service
              understands; the generated pact (pacts/, committed) is verified against the REAL
              producer code by microservice-security's provider tests -->
