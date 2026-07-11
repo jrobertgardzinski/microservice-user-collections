@@ -1,13 +1,15 @@
 Feature: A user's collections of saved references
   A user saves opaque references — a meme, a comment — into named collections. The service keeps
-  the refs and nothing else; it never interprets what they point at. Saving is idempotent, and
-  when the account is deleted every collection goes with it.
+  the refs and nothing else; it never interprets what they point at. Every command is idempotent
+  BY DEFAULT (workspace ADR 0006 — enforced by the generic IdempotentCommandsTest, not restated
+  per scenario); the scenarios below pin the REPLY contracts a caller can lean on. When the
+  account is deleted every collection goes with it.
 
   Scenario: Saving a reference puts it in the collection
     When alice saves meme 42 into "favourites"
     Then alice's "favourites" contains meme 42
 
-  Scenario: Saving the same reference twice is idempotent
+  Scenario: Saving twice tells the caller it was already there
     Given alice has saved meme 42 into "favourites"
     When alice saves meme 42 into "favourites"
     Then the save reports it was already there
@@ -28,7 +30,7 @@ Feature: A user's collections of saved references
     When alice removes meme 42 from "favourites"
     Then alice's "favourites" is empty
 
-  Scenario: Removing something not saved is idempotent
+  Scenario: Removing something not saved tells the caller it was not there
     When alice removes meme 42 from "favourites"
     Then the removal reports it was not there
 
