@@ -2,7 +2,7 @@ name: CI
 
 # microservice-user-collections needs one sibling SNAPSHOT (offline-jwt, public); checkouts use the workspace
 # layout (each repo in its own directory) because the saga-confirmation provider test verifies
-# microservice-security's committed pact from the sibling checkout. The reactor CI (in the
+# microservice-offboarding's committed pact from the sibling checkout. The reactor CI (in the
 # aggregator repo) still validates everything together.
 
 on:
@@ -21,8 +21,8 @@ jobs:
       # consumer of this service's confirmations — checkout only (its pacts/), no build
       - uses: actions/checkout@v4
         with:
-          repository: jrobertgardzinski/microservice-security
-          path: microservice-security
+          repository: jrobertgardzinski/microservice-offboarding
+          path: microservice-offboarding
       - uses: actions/checkout@v4
         with:
           repository: jrobertgardzinski/offline-jwt

@@ -26,11 +26,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * the {@code content-commands} event this service acts on, and proves it by driving the real
  * consumer with the pact's payload. Unlike memes/comments there is no policy axis — refs are
  * opaque, the purge is wholesale. The generated pact (pacts/, committed) is verified against the
- * REAL orchestrator by microservice-security's provider tests. Only the fields this consumer reads
+ * REAL orchestrator by microservice-offboarding's provider tests. Only the fields this consumer reads
  * are in the contract; the producer may add more (tolerant reader).
  */
 @ExtendWith(PactConsumerTestExt.class)
-@PactTestFor(providerName = "microservice-security", providerType = ProviderType.ASYNCH,
+@PactTestFor(providerName = "microservice-offboarding", providerType = ProviderType.ASYNCH,
         pactVersion = PactSpecVersion.V3)
 class PurgeCommandsContractTest {
 
