@@ -22,7 +22,20 @@
         <mainClass>com.jrobertgardzinski.collections.infrastructure.Main</mainClass>
         <cucumber.version>7.20.1</cucumber.version>
         <junit-suite.version>1.11.3</junit-suite.version>
+        <allure.version>2.29.0</allure.version>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>io.qameta.allure</groupId>
+                <artifactId>allure-bom</artifactId>
+                <version>${allure.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <dependency>
@@ -103,6 +116,17 @@
             <artifactId>hamcrest-all</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- test results feed the workspace-wide Allure aggregate (aggregate_allure.py) -->
+        <dependency>
+            <groupId>io.qameta.allure</groupId>
+            <artifactId>allure-junit5</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.qameta.allure</groupId>
+            <artifactId>allure-cucumber7-jvm</artifactId>
+            <scope>test</scope>
+        </dependency>
         <!-- spec-first: Gherkin scenarios drive the use cases (application-layer entry point) -->
         <dependency>
             <groupId>io.cucumber</groupId>
@@ -166,6 +190,8 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
                     <systemPropertyVariables>
+                        <!-- Allure results under target/ so mvn clean removes them -->
+                        <allure.results.directory>${project.build.directory}/allure-results</allure.results.directory>
                         <!-- the contract test writes the pact here (committed, not target/) so the
                              producer's provider tests verify it from a sibling checkout -->
                         <pact.rootDir>${project.basedir}/pacts</pact.rootDir>
