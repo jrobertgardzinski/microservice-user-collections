@@ -18,6 +18,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -171,6 +172,58 @@ class PurgeCommandsConsumerLoopTest {
         assertTrue(producer.history().isEmpty(),
                 "no confirmation for a purge that never happened — but the offset commits,"
                         + " because no retry can ever fix an empty email");
+    }
+
+    @Test
+    void a_permanently_failing_store_keeps_alive_green_while_health_stalls() throws Exception {
+        store.add("alice@example.com", "favourites", new ItemRef("meme", "42"));
+        MockProducer<String, String> producer =
+                new MockProducer<>(true, new StringSerializer(), new StringSerializer());
+        MockConsumer<String, String> consumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST);
+        AtomicInteger failures = new AtomicInteger();
+        // the poison-pill shape: every retry finds the database just as broken as the last one
+        CollectionStore alwaysFailing = new DelegatingStore(store) {
+            @Override
+            public int purgeUser(String user) {
+                failures.incrementAndGet();
+                consumer.schedulePollTask(() -> consumer.addRecord(command(0, PURGE_ALICE)));
+                throw new IllegalStateException("database permanently away");
+            }
+        };
+        prime(consumer, command(0, PURGE_ALICE));
+        PurgeCommandsConsumer purge = consumerUnderTest(alwaysFailing);
+
+        startLoop(purge, consumer, producer);
+        await("a few failed retry cycles", () -> failures.get() >= 3);
+        Thread.sleep(150);   // age the FROZEN cycle marker well past the tolerance asserted below
+
+        assertTrue(loopThread.isAlive(), "the loop must survive a permanently failing store");
+        assertTrue(purge.alive(Duration.ofSeconds(30)),
+                "/alive stays green: the thread keeps scheduling iterations, refreshing its"
+                        + " marker at the top of every failing/backoff pass");
+        assertFalse(purge.healthy(Duration.ofMillis(50)),
+                "/health reports the stall: not one cycle has completed since the loop started");
+        assertEquals(-1, committedOffset(consumer), "the failing batch must never commit");
+    }
+
+    @Test
+    void a_finished_thread_lets_the_alive_marker_stall() throws Exception {
+        MockProducer<String, String> producer =
+                new MockProducer<>(true, new StringSerializer(), new StringSerializer());
+        MockConsumer<String, String> consumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST);
+        prime(consumer, command(0, PURGE_ALICE));
+        PurgeCommandsConsumer purge = consumerUnderTest(store);
+
+        startLoop(purge, consumer, producer);
+        await("the record's offset to commit", () -> committedOffset(consumer) >= 1);
+        loopThread.interrupt();
+        loopThread.join(2_000);
+        assertFalse(loopThread.isAlive(), "the loop must have ended");
+
+        Thread.sleep(250);   // nothing refreshes the marker any more — let it age for real
+        assertFalse(purge.alive(Duration.ofMillis(100)),
+                "a thread that exited stops refreshing the scheduled marker, and /alive is"
+                        + " exactly the probe that must notice");
     }
 
     // ---- the harness ----

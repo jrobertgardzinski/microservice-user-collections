@@ -31,6 +31,15 @@ import java.util.Set;
  * confirms on {@code usercollections-events} — the third participant security waits for. The purge
  * is idempotent, so at-least-once delivery needs no extra dedup. The correlation id rides the Kafka
  * header, in and out, so the async hop keeps the trace of the request that started the deletion.
+ *
+ * <p><b>No dead-letter queue — on purpose.</b> Malformed commands (not JSON, no e-mail) are
+ * dropped and committed, because no retry can fix them. But a well-formed command whose handling
+ * keeps failing (a poison pill: say, a payload that reliably crashes the store) is retried with
+ * backoff forever — there is no DLQ to park it on, so it blocks its partition until a human or a
+ * fix intervenes. That is the accepted cost of the at-least-once contract here: the saga must not
+ * lose a purge, and the eternal retry is not silent — the cycle marker stops advancing and
+ * {@code /health} (readiness) turns 503, which is exactly the alarm an operator sees. Liveness
+ * ({@code /alive}) stays green through it: the loop is scheduling fine, it is the work that fails.
  */
 public class PurgeCommandsConsumer {
 
@@ -47,12 +56,18 @@ public class PurgeCommandsConsumer {
     private final ObjectMapper mapper;
     private final long initialBackoffMillis;
 
-    // the liveness marker /health watches: refreshed on every completed poll-handle-commit cycle
+    // the readiness marker /health watches: refreshed on every completed poll-handle-commit cycle
     // (and when the loop starts, so a service still warming up is not born unhealthy).
     // System.nanoTime, not currentTimeMillis: the marker measures elapsed time, and the wall
     // clock can jump (NTP step) — backwards would fake a 503, forwards would mask a real stall.
     // Package-private so the health test can age the marker without waiting out a real stall.
     volatile long lastCycleNanos = System.nanoTime();
+
+    // the liveness marker /alive watches: refreshed at the TOP of every loop iteration —
+    // successful, failing and backoff ones alike — so it distinguishes "the thread still
+    // schedules, the work fails" (alive, not ready) from "the thread is gone or wedged" (not
+    // alive). Same monotonic clock and the same package-private test seam as above.
+    volatile long lastScheduledNanos = System.nanoTime();
 
     public PurgeCommandsConsumer(PurgeUserItems purgeUserItems, ObjectMapper mapper) {
         this(purgeUserItems, mapper, DEFAULT_INITIAL_BACKOFF_MILLIS);
@@ -67,14 +82,29 @@ public class PurgeCommandsConsumer {
     }
 
     /**
-     * True while the loop keeps completing cycles within the stall tolerance — the real liveness
-     * behind /health: a dead or wedged consumer thread stops refreshing the marker and /health
-     * turns 503. That buys visibility (the compose healthcheck marks the container unhealthy in
+     * READINESS, behind /health: true while the loop keeps COMPLETING cycles within the stall
+     * tolerance. Cycles stop completing when a dependency is broken — database down, broker
+     * unreachable, a poison pill in eternal retry — so /health turning 503 means "this instance
+     * cannot currently do its saga share", whether or not the thread itself is fine. That buys
+     * visibility (the compose healthcheck marks the container unhealthy in
      * {@code docker compose ps}), not a restart — plain compose never restarts an unhealthy
      * container; an orchestrator (k3s, Swarm) acting on the same probe would.
      */
     public boolean healthy(Duration stallTolerance) {
         return System.nanoTime() - lastCycleNanos <= stallTolerance.toNanos();
+    }
+
+    /**
+     * LIVENESS, behind /alive: true while the loop thread keeps getting scheduled at all — the
+     * marker is refreshed at the top of every iteration, failing and backoff ones included, so a
+     * database outage (cycles fail, thread loops on) keeps /alive at 200 while /health reports
+     * the stall. Only a thread that has really stopped — exited, or wedged inside one iteration
+     * longer than the tolerance — turns /alive into a 503. The split is deliberate: restarting
+     * on /alive can heal a wedged process, restarting on a broken dependency (/health) would
+     * just crash-loop without fixing the dependency.
+     */
+    public boolean alive(Duration stallTolerance) {
+        return System.nanoTime() - lastScheduledNanos <= stallTolerance.toNanos();
     }
 
     /**
@@ -87,7 +117,11 @@ public class PurgeCommandsConsumer {
         try {
             command = mapper.readTree(commandPayload);
         } catch (Exception malformed) {
-            LOG.warn("dropping malformed command: {}", commandPayload);
+            // NOT the payload itself: a purge command carries the leaver's e-mail, and even a
+            // malformed one may — PII stays out of the logs, the size is enough to investigate
+            // (the same rule the comments service's listener follows)
+            LOG.warn("dropping a malformed command ({} chars, not valid JSON)",
+                    commandPayload == null ? 0 : commandPayload.length());
             return Optional.empty();
         }
         if (!"PURGE_USER_CONTENT".equals(command.path("type").asText())) {
@@ -102,7 +136,8 @@ public class PurgeCommandsConsumer {
             return Optional.empty();
         }
         int removed = purgeUserItems.execute(email);
-        LOG.info("purged {} collection refs of {} (saga {})", removed, email, sagaId);
+        // the saga id identifies the run in logs; the e-mail is PII and stays out of INFO lines
+        LOG.info("purged {} collection refs of one leaver (saga {})", removed, sagaId);
         try {
             return Optional.of(mapper.writeValueAsString(mapper.createObjectNode()
                     .put("type", "USER_CONTENT_PURGED")
@@ -151,10 +186,14 @@ public class PurgeCommandsConsumer {
      */
     void run(Consumer<String, String> consumer, Producer<String, String> producer) {
         consumer.subscribe(List.of(COMMANDS_TOPIC));
-        lastCycleNanos = System.nanoTime();   // liveness counts from the loop's start
+        lastCycleNanos = System.nanoTime();   // readiness counts from the loop's start
         long backoffMillis = initialBackoffMillis;
         boolean rewindNeeded = false;
         while (!Thread.currentThread().isInterrupted()) {
+            // liveness first: the marker moves on EVERY iteration the scheduler grants us —
+            // including the ones that will fail and back off — so /alive tracks the thread,
+            // not the luck of the work
+            lastScheduledNanos = System.nanoTime();
             try {
                 if (rewindNeeded) {
                     // poll() already advanced past the failed batch in memory; step back to
