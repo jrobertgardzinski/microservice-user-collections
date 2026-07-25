@@ -47,8 +47,41 @@ public class PurgeCommandsConsumer {
     static final String EVENTS_TOPIC = "usercollections-events";
     static final String CID_HEADER = "X-Correlation-Id";
 
+    /** The longest the loop legitimately pauses between iterations: the retry backoff's cap. */
+    static final Duration MAX_BACKOFF = Duration.ofSeconds(30);
+
+    /**
+     * The producer's delivery clocks, set EXPLICITLY because /alive depends on them (the same
+     * discipline as microservice-offboarding's KafkaLoop): the confirmation's {@code send().get()}
+     * during a broker outage blocks a loop iteration for up to {@code delivery.timeout.ms} — with
+     * Kafka's default of 120s one such iteration would outlast the /alive stall tolerance (same
+     * default 120s) and a mere broker outage would read as a dead thread. 30s bounds the block
+     * well inside the tolerance; {@link Main#ALIVE_STALL_FLOOR} is derived from these same
+     * constants so the two can never drift apart.
+     */
+    static final Duration DELIVERY_TIMEOUT = Duration.ofSeconds(30);
+    /** One in-flight request's timeout; two of these fit inside {@link #DELIVERY_TIMEOUT}. */
+    static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(15);
+    /** How long send() may block on metadata — the same bound as the delivery timeout. */
+    static final Duration MAX_BLOCK = Duration.ofSeconds(30);
+
+    /** One poll's wait — also part of the /alive floor arithmetic in {@link Main}. */
+    static final Duration POLL_EVERY = Duration.ofSeconds(1);
+
+    /**
+     * The /health honesty probe's cadence and patience: an EMPTY poll against a DEAD broker
+     * returns normally, so an idle consumer would keep "completing" cycles and /health would
+     * stay 200 through an outage the javadoc promises it reports. Every {@code PROBE_EVERY_CYCLES}
+     * completed cycles the loop therefore asks the broker something that requires an ANSWER
+     * ({@code listTopics}); no answer within {@code PROBE_TIMEOUT} fails the cycle, freezes the
+     * readiness marker, and /health turns 503 — with commands flowing the cycles prove the broker
+     * anyway, so the probe only matters (and only costs) when the topic is quiet.
+     */
+    static final int PROBE_EVERY_CYCLES = 10;
+    static final Duration PROBE_TIMEOUT = Duration.ofSeconds(5);
+
     private static final long DEFAULT_INITIAL_BACKOFF_MILLIS = 1_000;
-    private static final long MAX_BACKOFF_MILLIS = 30_000;
+    private static final long MAX_BACKOFF_MILLIS = MAX_BACKOFF.toMillis();
 
     private static final Logger LOG = LoggerFactory.getLogger(PurgeCommandsConsumer.class);
 
@@ -85,7 +118,11 @@ public class PurgeCommandsConsumer {
      * READINESS, behind /health: true while the loop keeps COMPLETING cycles within the stall
      * tolerance. Cycles stop completing when a dependency is broken — database down, broker
      * unreachable, a poison pill in eternal retry — so /health turning 503 means "this instance
-     * cannot currently do its saga share", whether or not the thread itself is fine. That buys
+     * cannot currently do its saga share", whether or not the thread itself is fine. "Broker
+     * unreachable" is honest even on a QUIET topic: empty polls return normally against a dead
+     * broker, so the loop backs its cycles with a periodic round-trip probe (see
+     * {@link #PROBE_EVERY_CYCLES}) — a broker that stops answering fails the probing cycle
+     * within {@code PROBE_EVERY_CYCLES} polls plus {@code PROBE_TIMEOUT}. That buys
      * visibility (the compose healthcheck marks the container unhealthy in
      * {@code docker compose ps}), not a restart — plain compose never restarts an unhealthy
      * container; an orchestrator (k3s, Swarm) acting on the same probe would.
@@ -189,6 +226,7 @@ public class PurgeCommandsConsumer {
         lastCycleNanos = System.nanoTime();   // readiness counts from the loop's start
         long backoffMillis = initialBackoffMillis;
         boolean rewindNeeded = false;
+        int cyclesSinceProbe = 0;
         while (!Thread.currentThread().isInterrupted()) {
             // liveness first: the marker moves on EVERY iteration the scheduler grants us —
             // including the ones that will fail and back off — so /alive tracks the thread,
@@ -201,12 +239,22 @@ public class PurgeCommandsConsumer {
                     rewindToCommitted(consumer);
                     rewindNeeded = false;
                 }
-                ConsumerRecords<String, String> records = consumer.poll(Duration.ofSeconds(1));
+                if (cyclesSinceProbe >= PROBE_EVERY_CYCLES) {
+                    // the honesty probe (see PROBE_EVERY_CYCLES): empty polls prove nothing
+                    // about the broker, this round-trip does — and its TimeoutException on a
+                    // dead broker fails the cycle so /health can keep its "broker unreachable
+                    // shows here" promise. The counter resets only on the probe's SUCCESS: a
+                    // failing probe is retried every iteration until the broker answers again
+                    consumer.listTopics(PROBE_TIMEOUT);
+                    cyclesSinceProbe = 0;
+                }
+                ConsumerRecords<String, String> records = consumer.poll(POLL_EVERY);
                 for (ConsumerRecord<String, String> record : records) {
                     handleRecord(record, producer);
                 }
                 consumer.commitSync();
                 lastCycleNanos = System.nanoTime();
+                cyclesSinceProbe++;
                 backoffMillis = initialBackoffMillis;   // a full cycle worked: forgive the past
             } catch (InterruptException stopping) {
                 return;   // the JVM is going down; Kafka re-set the interrupt flag already
@@ -287,6 +335,15 @@ public class PurgeCommandsConsumer {
         props.put("bootstrap.servers", bootstrap);
         props.put("key.serializer", "org.apache.kafka.common.serialization.StringSerializer");
         props.put("value.serializer", "org.apache.kafka.common.serialization.StringSerializer");
+        // the delivery clocks, EXPLICIT because /alive depends on them (see DELIVERY_TIMEOUT):
+        // during a broker outage the confirmation's send().get() blocks an iteration for up to
+        // delivery.timeout.ms and a metadata-less send() for up to max.block.ms — both must stay
+        // well inside COLLECTIONS_ALIVE_STALL_SEC, whose floor Main derives from these very
+        // constants. Kafka's defaults (120s / 60s) would let one blocked iteration outlast the
+        // probe and turn a broker outage into a false "dead thread" restart
+        props.put("delivery.timeout.ms", String.valueOf(DELIVERY_TIMEOUT.toMillis()));
+        props.put("request.timeout.ms", String.valueOf(REQUEST_TIMEOUT.toMillis()));
+        props.put("max.block.ms", String.valueOf(MAX_BLOCK.toMillis()));
         return props;
     }
 }

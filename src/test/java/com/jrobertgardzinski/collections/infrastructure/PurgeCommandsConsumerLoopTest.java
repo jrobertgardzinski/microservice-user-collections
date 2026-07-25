@@ -207,6 +207,50 @@ class PurgeCommandsConsumerLoopTest {
     }
 
     @Test
+    void a_dead_broker_on_a_quiet_topic_fails_the_probe_and_stalls_health_not_alive()
+            throws Exception {
+        MockProducer<String, String> producer =
+                new MockProducer<>(true, new StringSerializer(), new StringSerializer());
+        java.util.concurrent.atomic.AtomicBoolean brokerAnswers =
+                new java.util.concurrent.atomic.AtomicBoolean(false);
+        AtomicInteger failedProbes = new AtomicInteger();
+        // a broker that stops answering: polls still "work" (empty — exactly what a real dead
+        // broker returns), only the round-trip probe can tell the difference
+        MockConsumer<String, String> consumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST) {
+            @Override
+            public synchronized Map<String, List<org.apache.kafka.common.PartitionInfo>> listTopics(
+                    Duration timeout) {
+                if (!brokerAnswers.get()) {
+                    failedProbes.incrementAndGet();
+                    throw new org.apache.kafka.common.errors.TimeoutException(
+                            "simulated dead broker: no metadata answer within " + timeout);
+                }
+                return super.listTopics(timeout);
+            }
+        };
+        // a QUIET topic: assignment, then nothing but empty polls — the shape under which the
+        // old cycle counter kept "completing" against a dead broker and /health lied 200
+        consumer.updateBeginningOffsets(Map.of(PARTITION, 0L));
+        consumer.schedulePollTask(() -> consumer.rebalance(List.of(PARTITION)));
+        PurgeCommandsConsumer purge = consumerUnderTest(store);
+
+        startLoop(purge, consumer, producer);
+        await("the probe cadence to kick in and keep failing", () -> failedProbes.get() >= 3);
+        Thread.sleep(150);   // age the FROZEN cycle marker well past the tolerance below
+
+        assertTrue(loopThread.isAlive(), "a failing probe must not kill the loop");
+        assertTrue(purge.alive(Duration.ofSeconds(30)),
+                "/alive stays green: the thread schedules fine, it is the broker that is gone");
+        assertFalse(purge.healthy(Duration.ofMillis(50)),
+                "/health must report the dead broker even though every poll came back empty");
+
+        // the broker answers again: the probe passes, cycles complete, readiness recovers
+        brokerAnswers.set(true);
+        await("a completed cycle once the broker answers again",
+                () -> purge.healthy(Duration.ofMillis(500)));
+    }
+
+    @Test
     void a_finished_thread_lets_the_alive_marker_stall() throws Exception {
         MockProducer<String, String> producer =
                 new MockProducer<>(true, new StringSerializer(), new StringSerializer());

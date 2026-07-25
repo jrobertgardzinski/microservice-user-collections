@@ -7,6 +7,8 @@ import com.jrobertgardzinski.collections.application.PurgeUserItems;
 import com.jrobertgardzinski.collections.application.RemoveItem;
 import com.jrobertgardzinski.collections.application.SaveItem;
 import io.helidon.webserver.WebServer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.sql.DataSource;
 import java.time.Duration;
@@ -22,9 +24,13 @@ import java.time.Duration;
  * <p>Two probes, two questions. {@code /health} is READINESS: 503 once the consumer stops
  * completing cycles for longer than {@code COLLECTIONS_CONSUMER_STALL_SEC} (default 60) — a broken
  * dependency (database down, broker away, a poison pill in eternal retry) shows here, because a
- * cycle only completes when the whole poll-handle-confirm-commit chain works. {@code /alive} is
+ * cycle only completes when the whole poll-handle-confirm-commit chain works, and because every
+ * {@link PurgeCommandsConsumer#PROBE_EVERY_CYCLES} cycles the loop demands a real answer from the
+ * broker (empty polls return normally against a dead one, so a quiet topic alone proves nothing).
+ * {@code /alive} is
  * LIVENESS: 503 only once the loop thread itself stops being scheduled for longer than
- * {@code COLLECTIONS_ALIVE_STALL_SEC} (default 120) — its marker is refreshed at the top of every
+ * {@code COLLECTIONS_ALIVE_STALL_SEC} (default 120, floored at {@link #ALIVE_STALL_FLOOR} derived
+ * from the producer's delivery timeout and the retry backoff) — its marker is refreshed at the top of every
  * iteration, failing and backoff ones included, so a database outage keeps /alive at 200 while
  * /health reports the stall. Restarting on /alive can heal a wedged process; restarting on /health
  * would just crash-loop against the broken dependency. Without {@code KAFKA_BOOTSTRAP_SERVERS} the
@@ -36,7 +42,51 @@ import java.time.Duration;
  */
 public final class Main {
 
+    private static final Logger LOG = LoggerFactory.getLogger(Main.class);
+
+    /** The /alive stall tolerance's floor, DERIVED from the consumer loop's own clocks (never a
+     *  magic number — the same discipline as microservice-offboarding): during a broker outage
+     *  one iteration legitimately holds a confirmation send for up to
+     *  {@link PurgeCommandsConsumer#DELIVERY_TIMEOUT} (= {@link PurgeCommandsConsumer#MAX_BLOCK})
+     *  and then backs off up to {@link PurgeCommandsConsumer#MAX_BACKOFF}, so the tolerance
+     *  covers two of the longer of those plus a poll and a broker probe of margin — below that a
+     *  mere broker outage could outlast the probe and read as a dead thread, restarting a pod a
+     *  restart cannot fix. Currently 66s; the 120s default sits comfortably above. */
+    static final Duration ALIVE_STALL_FLOOR =
+            max(PurgeCommandsConsumer.DELIVERY_TIMEOUT, PurgeCommandsConsumer.MAX_BACKOFF)
+                    .multipliedBy(2)
+                    .plus(PurgeCommandsConsumer.POLL_EVERY)
+                    .plus(PurgeCommandsConsumer.PROBE_TIMEOUT);
+
+    private static Duration max(Duration a, Duration b) {
+        return a.compareTo(b) >= 0 ? a : b;
+    }
+
     private Main() {
+    }
+
+    /**
+     * The /alive tolerance floored at {@link #ALIVE_STALL_FLOOR}: a smaller configured value
+     * would let an iteration legitimately blocked by a broker outage (send held up to the
+     * delivery timeout, then the backoff) read as a wedged thread — the exact restart-loop the
+     * readiness/liveness split exists to prevent. Floored loudly, through the logger, where the
+     * service's own WARNs live. Package-private for the test.
+     */
+    static Duration flooredAliveStall(String name, Duration configured) {
+        if (configured.compareTo(ALIVE_STALL_FLOOR) >= 0) {
+            return configured;
+        }
+        LOG.warn("{}={}s is below the {}s floor derived from the loop's clocks (2 x max of"
+                        + " delivery.timeout {}s and max backoff {}s, plus the {}s poll and the"
+                        + " {}s broker probe) — a broker outage legitimately holds an iteration"
+                        + " that long, and a smaller tolerance would let /alive restart the"
+                        + " service over a broker problem; using {}s instead",
+                name, configured.toSeconds(), ALIVE_STALL_FLOOR.toSeconds(),
+                PurgeCommandsConsumer.DELIVERY_TIMEOUT.toSeconds(),
+                PurgeCommandsConsumer.MAX_BACKOFF.toSeconds(),
+                PurgeCommandsConsumer.POLL_EVERY.toSeconds(),
+                PurgeCommandsConsumer.PROBE_TIMEOUT.toSeconds(), ALIVE_STALL_FLOOR.toSeconds());
+        return ALIVE_STALL_FLOOR;
     }
 
     /**
@@ -88,8 +138,13 @@ public final class Main {
         PurgeCommandsConsumer watchedConsumer = purgeConsumer;
         Duration consumerStall = Duration.ofSeconds(stallSeconds("COLLECTIONS_CONSUMER_STALL_SEC",
                 System.getenv().getOrDefault("COLLECTIONS_CONSUMER_STALL_SEC", "60")));
-        Duration aliveStall = Duration.ofSeconds(stallSeconds("COLLECTIONS_ALIVE_STALL_SEC",
-                System.getenv().getOrDefault("COLLECTIONS_ALIVE_STALL_SEC", "120")));
+        // 120s default: covers the worst legitimate iteration gap during a broker outage — a
+        // confirmation send blocked up to delivery.timeout (30s) plus one max backoff (30s) —
+        // with room to spare; the floor is derived from those same constants (ALIVE_STALL_FLOOR)
+        // so a smaller configured value cannot turn a broker outage into a fake dead-thread 503
+        Duration aliveStall = flooredAliveStall("COLLECTIONS_ALIVE_STALL_SEC",
+                Duration.ofSeconds(stallSeconds("COLLECTIONS_ALIVE_STALL_SEC",
+                        System.getenv().getOrDefault("COLLECTIONS_ALIVE_STALL_SEC", "120"))));
 
         WebServer server = WebServer.builder()
                 .port(port)

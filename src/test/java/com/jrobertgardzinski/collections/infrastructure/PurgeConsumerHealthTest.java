@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import java.time.Duration;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -108,5 +109,38 @@ class PurgeConsumerHealthTest {
                 "the fail-fast message must name the variable to fix");
         assertTrue(failure.getMessage().contains("-5"),
                 "the fail-fast message must quote the refused value");
+    }
+
+    @Test
+    void the_alive_floor_is_derived_from_the_loop_clocks_not_a_magic_number() {
+        // 2 x max(delivery.timeout, max backoff) + a poll + a broker probe — recomputed here
+        // from the same constants, so a drift on either side breaks the build
+        Duration longestBlock =
+                PurgeCommandsConsumer.DELIVERY_TIMEOUT.compareTo(PurgeCommandsConsumer.MAX_BACKOFF) >= 0
+                        ? PurgeCommandsConsumer.DELIVERY_TIMEOUT : PurgeCommandsConsumer.MAX_BACKOFF;
+        assertEquals(longestBlock.multipliedBy(2)
+                        .plus(PurgeCommandsConsumer.POLL_EVERY)
+                        .plus(PurgeCommandsConsumer.PROBE_TIMEOUT),
+                Main.ALIVE_STALL_FLOOR);
+        assertTrue(Main.ALIVE_STALL_FLOOR.compareTo(Duration.ofSeconds(120)) < 0,
+                "the documented 120s default must sit above the floor");
+    }
+
+    @Test
+    void an_alive_stall_below_the_derived_floor_is_floored() {
+        // below the floor a broker outage (a send legitimately blocked up to delivery.timeout,
+        // then the backoff) would read as a dead thread and restart the pod for nothing
+        assertEquals(Main.ALIVE_STALL_FLOOR,
+                Main.flooredAliveStall("COLLECTIONS_ALIVE_STALL_SEC", Duration.ofSeconds(30)));
+        assertEquals(Main.ALIVE_STALL_FLOOR, Main.flooredAliveStall("COLLECTIONS_ALIVE_STALL_SEC",
+                Main.ALIVE_STALL_FLOOR.minusSeconds(1)));
+    }
+
+    @Test
+    void an_alive_stall_at_or_above_the_derived_floor_is_kept() {
+        assertEquals(Duration.ofSeconds(120),
+                Main.flooredAliveStall("COLLECTIONS_ALIVE_STALL_SEC", Duration.ofSeconds(120)));
+        assertEquals(Main.ALIVE_STALL_FLOOR,
+                Main.flooredAliveStall("COLLECTIONS_ALIVE_STALL_SEC", Main.ALIVE_STALL_FLOOR));
     }
 }
