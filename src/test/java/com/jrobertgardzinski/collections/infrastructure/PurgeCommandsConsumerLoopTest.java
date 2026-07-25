@@ -218,14 +218,14 @@ class PurgeCommandsConsumerLoopTest {
         // broker returns), only the round-trip probe can tell the difference
         MockConsumer<String, String> consumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST) {
             @Override
-            public synchronized Map<String, List<org.apache.kafka.common.PartitionInfo>> listTopics(
-                    Duration timeout) {
+            public List<org.apache.kafka.common.PartitionInfo> partitionsFor(
+                    String topic, Duration timeout) {
                 if (!brokerAnswers.get()) {
                     failedProbes.incrementAndGet();
                     throw new org.apache.kafka.common.errors.TimeoutException(
                             "simulated dead broker: no metadata answer within " + timeout);
                 }
-                return super.listTopics(timeout);
+                return super.partitionsFor(topic, timeout);
             }
         };
         // a QUIET topic: assignment, then nothing but empty polls — the shape under which the
@@ -248,6 +248,100 @@ class PurgeCommandsConsumerLoopTest {
         brokerAnswers.set(true);
         await("a completed cycle once the broker answers again",
                 () -> purge.healthy(Duration.ofMillis(500)));
+    }
+
+    @Test
+    void a_failed_probe_rewinds_nothing_and_keeps_the_liveness_beat() throws Exception {
+        // the regression this pins: the probe's TimeoutException used to land in the generic
+        // catch, which raised the rewind flag — so the NEXT iteration walked committed() over
+        // the assignment, one wait of up to default.api.timeout.ms per partition, for a batch
+        // that was never consumed. Nothing was polled here, so nothing may be sought back.
+        MockProducer<String, String> producer =
+                new MockProducer<>(true, new StringSerializer(), new StringSerializer());
+        AtomicInteger failedProbes = new AtomicInteger();
+        AtomicInteger seeks = new AtomicInteger();
+        AtomicInteger committedLookups = new AtomicInteger();
+        MockConsumer<String, String> consumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST) {
+            @Override
+            public List<org.apache.kafka.common.PartitionInfo> partitionsFor(
+                    String topic, Duration timeout) {
+                failedProbes.incrementAndGet();
+                throw new org.apache.kafka.common.errors.TimeoutException("dead broker");
+            }
+
+            @Override
+            public synchronized void seek(TopicPartition partition, long offset) {
+                seeks.incrementAndGet();
+                super.seek(partition, offset);
+            }
+
+            @Override
+            public synchronized void seekToBeginning(java.util.Collection<TopicPartition> parts) {
+                seeks.incrementAndGet();
+                super.seekToBeginning(parts);
+            }
+
+            @Override
+            public synchronized Map<TopicPartition, OffsetAndMetadata> committed(
+                    Set<TopicPartition> partitions) {
+                committedLookups.incrementAndGet();
+                return super.committed(partitions);
+            }
+        };
+        // an ASSIGNED partition, so a rewind would have something to seek on if it happened
+        consumer.updateBeginningOffsets(Map.of(PARTITION, 0L));
+        consumer.schedulePollTask(() -> consumer.rebalance(List.of(PARTITION)));
+        PurgeCommandsConsumer purge = consumerUnderTest(store);
+
+        startLoop(purge, consumer, producer);
+        await("several failing probes", () -> failedProbes.get() >= 3);
+
+        assertEquals(0, seeks.get(),
+                "a failed probe consumed nothing, so the next iteration must not rewind");
+        assertEquals(0, committedLookups.get(),
+                "and must not spend a default.api.timeout.ms committed() lookup on it either");
+        assertTrue(purge.alive(Duration.ofSeconds(30)),
+                "the beat keeps beating: the thread is scheduling, the broker is what is gone");
+        assertTrue(loopThread.isAlive(), "a silent broker must not kill the loop");
+    }
+
+    @Test
+    void the_probe_is_paced_by_the_clock_not_by_the_cycle_count() throws Exception {
+        // under load a cycle takes microseconds, so a "every N cycles" cadence fired this
+        // metadata round trip several times a second — the javadoc's promise that the probe
+        // only costs anything on a quiet topic was simply untrue
+        MockProducer<String, String> producer =
+                new MockProducer<>(true, new StringSerializer(), new StringSerializer());
+        AtomicInteger probes = new AtomicInteger();
+        AtomicInteger cycles = new AtomicInteger();
+        java.util.Set<String> probedTopics = java.util.concurrent.ConcurrentHashMap.newKeySet();
+        MockConsumer<String, String> consumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST) {
+            @Override
+            public List<org.apache.kafka.common.PartitionInfo> partitionsFor(
+                    String topic, Duration timeout) {
+                probedTopics.add(topic);
+                probes.incrementAndGet();
+                return super.partitionsFor(topic, timeout);
+            }
+
+            @Override
+            public synchronized void commitSync() {
+                cycles.incrementAndGet();
+                super.commitSync();
+            }
+        };
+        consumer.updateBeginningOffsets(Map.of(PARTITION, 0L));
+        consumer.schedulePollTask(() -> consumer.rebalance(List.of(PARTITION)));
+
+        startLoop(consumerUnderTest(store), consumer, producer);
+        // MockConsumer.poll returns at once, so these are the "cycles take milliseconds" case
+        await("a burst of completed cycles", () -> cycles.get() >= 100);
+
+        assertEquals(1, probes.get(),
+                "exactly one probe — the first iteration's — inside a cadence window of "
+                        + PurgeCommandsConsumer.PROBE_EVERY + ", however many cycles ran");
+        assertEquals(Set.of(PurgeCommandsConsumer.COMMANDS_TOPIC), probedTopics,
+                "the probe must ask about the one topic we consume, not the whole cluster");
     }
 
     @Test

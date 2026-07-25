@@ -113,17 +113,53 @@ class PurgeConsumerHealthTest {
 
     @Test
     void the_alive_floor_is_derived_from_the_loop_clocks_not_a_magic_number() {
-        // 2 x max(delivery.timeout, max backoff) + a poll + a broker probe — recomputed here
-        // from the same constants, so a drift on either side breaks the build
-        Duration longestBlock =
-                PurgeCommandsConsumer.DELIVERY_TIMEOUT.compareTo(PurgeCommandsConsumer.MAX_BACKOFF) >= 0
-                        ? PurgeCommandsConsumer.DELIVERY_TIMEOUT : PurgeCommandsConsumer.MAX_BACKOFF;
-        assertEquals(longestBlock.multipliedBy(2)
-                        .plus(PurgeCommandsConsumer.POLL_EVERY)
-                        .plus(PurgeCommandsConsumer.PROBE_TIMEOUT),
+        // 2 x max(delivery.timeout, default.api.timeout, max backoff) + a poll + a broker probe,
+        // plus the margin — recomputed here from the same constants, so a drift on either side
+        // breaks the build
+        Duration longestBlock = longest(PurgeCommandsConsumer.DELIVERY_TIMEOUT,
+                PurgeCommandsConsumer.API_TIMEOUT, PurgeCommandsConsumer.MAX_BACKOFF);
+        Duration derived = longestBlock.multipliedBy(2)
+                .plus(PurgeCommandsConsumer.POLL_EVERY)
+                .plus(PurgeCommandsConsumer.PROBE_TIMEOUT);
+        assertEquals(Duration.ofSeconds(Math.ceilDiv(
+                        derived.toMillis() * (100 + Main.FLOOR_MARGIN_PERCENT) / 100, 1_000)),
                 Main.ALIVE_STALL_FLOOR);
+        assertTrue(Main.ALIVE_STALL_FLOOR.compareTo(derived) > 0,
+                "the floor must sit strictly ABOVE the bare arithmetic: alive() compares with"
+                        + " <=, and a GC pause on top of an honest worst case must not read dead");
         assertTrue(Main.ALIVE_STALL_FLOOR.compareTo(Duration.ofSeconds(120)) < 0,
                 "the documented 120s default must sit above the floor");
+    }
+
+    @Test
+    void the_consumers_own_blocking_clock_is_explicit_and_inside_the_alive_floor() {
+        // the finding this pins: only the PRODUCER's clocks used to be set, so commitSync(),
+        // the rewind's committed() lookup and the readiness probe each still waited Kafka's
+        // 60s default.api.timeout.ms on a dead broker — two of those in one iteration outlast
+        // the whole /alive tolerance, and the outage reads as a wedged thread
+        assertEquals(String.valueOf(PurgeCommandsConsumer.API_TIMEOUT.toMillis()),
+                PurgeCommandsConsumer.consumerProps("localhost:9092")
+                        .getProperty("default.api.timeout.ms"),
+                "the consumer's api timeout must be set explicitly, never left at Kafka's 60s");
+        assertEquals(String.valueOf(PurgeCommandsConsumer.REQUEST_TIMEOUT.toMillis()),
+                PurgeCommandsConsumer.consumerProps("localhost:9092")
+                        .getProperty("request.timeout.ms"));
+        assertTrue(PurgeCommandsConsumer.REQUEST_TIMEOUT
+                        .compareTo(PurgeCommandsConsumer.API_TIMEOUT) < 0,
+                "one in-flight request must fit inside one API call");
+        assertTrue(Main.ALIVE_STALL_FLOOR
+                        .compareTo(PurgeCommandsConsumer.API_TIMEOUT.multipliedBy(2)) > 0,
+                "two consumer API waits in one iteration must still fit inside the tolerance");
+    }
+
+    private static Duration longest(Duration first, Duration... rest) {
+        Duration longest = first;
+        for (Duration candidate : rest) {
+            if (candidate.compareTo(longest) > 0) {
+                longest = candidate;
+            }
+        }
+        return longest;
     }
 
     @Test

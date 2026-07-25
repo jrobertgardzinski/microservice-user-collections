@@ -24,8 +24,8 @@ import java.time.Duration;
  * <p>Two probes, two questions. {@code /health} is READINESS: 503 once the consumer stops
  * completing cycles for longer than {@code COLLECTIONS_CONSUMER_STALL_SEC} (default 60) — a broken
  * dependency (database down, broker away, a poison pill in eternal retry) shows here, because a
- * cycle only completes when the whole poll-handle-confirm-commit chain works, and because every
- * {@link PurgeCommandsConsumer#PROBE_EVERY_CYCLES} cycles the loop demands a real answer from the
+ * cycle only completes when the whole poll-handle-confirm-commit chain works, and because at most
+ * once per {@link PurgeCommandsConsumer#PROBE_EVERY} the loop demands a real answer from the
  * broker (empty polls return normally against a dead one, so a quiet topic alone proves nothing).
  * {@code /alive} is
  * LIVENESS: 503 only once the loop thread itself stops being scheduled for longer than
@@ -44,22 +44,37 @@ public final class Main {
 
     private static final Logger LOG = LoggerFactory.getLogger(Main.class);
 
+    /** The safety margin the derived floor carries on top of the arithmetic: {@code alive()}
+     *  compares the age of the marker with {@code <=}, and an iteration that legitimately
+     *  spends every clock it is allowed still pays for a GC pause, a socket settling or the
+     *  scheduler's own latency on top — an exactly-tight floor would call that a dead thread. */
+    static final int FLOOR_MARGIN_PERCENT = 25;
+
     /** The /alive stall tolerance's floor, DERIVED from the consumer loop's own clocks (never a
      *  magic number — the same discipline as microservice-offboarding): during a broker outage
      *  one iteration legitimately holds a confirmation send for up to
-     *  {@link PurgeCommandsConsumer#DELIVERY_TIMEOUT} (= {@link PurgeCommandsConsumer#MAX_BLOCK})
-     *  and then backs off up to {@link PurgeCommandsConsumer#MAX_BACKOFF}, so the tolerance
-     *  covers two of the longer of those plus a poll and a broker probe of margin — below that a
-     *  mere broker outage could outlast the probe and read as a dead thread, restarting a pod a
-     *  restart cannot fix. Currently 66s; the 120s default sits comfortably above. */
-    static final Duration ALIVE_STALL_FLOOR =
-            max(PurgeCommandsConsumer.DELIVERY_TIMEOUT, PurgeCommandsConsumer.MAX_BACKOFF)
+     *  {@link PurgeCommandsConsumer#DELIVERY_TIMEOUT} (= {@link PurgeCommandsConsumer#MAX_BLOCK}),
+     *  a commit or a rewind lookup for up to {@link PurgeCommandsConsumer#API_TIMEOUT}, and then
+     *  backs off up to {@link PurgeCommandsConsumer#MAX_BACKOFF}, so the tolerance covers two of
+     *  the longest of those plus a poll and a broker probe, plus {@link #FLOOR_MARGIN_PERCENT} —
+     *  below that a mere broker outage could outlast the probe and read as a dead thread,
+     *  restarting a pod a restart cannot fix. Currently 83s; the 120s default sits above. */
+    static final Duration ALIVE_STALL_FLOOR = withMargin(
+            max(max(PurgeCommandsConsumer.DELIVERY_TIMEOUT, PurgeCommandsConsumer.API_TIMEOUT),
+                    PurgeCommandsConsumer.MAX_BACKOFF)
                     .multipliedBy(2)
                     .plus(PurgeCommandsConsumer.POLL_EVERY)
-                    .plus(PurgeCommandsConsumer.PROBE_TIMEOUT);
+                    .plus(PurgeCommandsConsumer.PROBE_TIMEOUT));
 
     private static Duration max(Duration a, Duration b) {
         return a.compareTo(b) >= 0 ? a : b;
+    }
+
+    /** The derived worst case plus {@link #FLOOR_MARGIN_PERCENT}, rounded UP to whole seconds —
+     *  the tolerance is configured and logged in seconds, so the floor lives in them too. */
+    private static Duration withMargin(Duration derived) {
+        long millis = derived.toMillis() * (100 + FLOOR_MARGIN_PERCENT) / 100;
+        return Duration.ofSeconds(Math.ceilDiv(millis, 1_000));
     }
 
     private Main() {
@@ -77,15 +92,18 @@ public final class Main {
             return configured;
         }
         LOG.warn("{}={}s is below the {}s floor derived from the loop's clocks (2 x max of"
-                        + " delivery.timeout {}s and max backoff {}s, plus the {}s poll and the"
-                        + " {}s broker probe) — a broker outage legitimately holds an iteration"
-                        + " that long, and a smaller tolerance would let /alive restart the"
-                        + " service over a broker problem; using {}s instead",
+                        + " delivery.timeout {}s, default.api.timeout {}s and max backoff {}s,"
+                        + " plus the {}s poll and the {}s broker probe, plus {}% margin) — a"
+                        + " broker outage legitimately holds an iteration that long, and a"
+                        + " smaller tolerance would let /alive restart the service over a broker"
+                        + " problem; using {}s instead",
                 name, configured.toSeconds(), ALIVE_STALL_FLOOR.toSeconds(),
                 PurgeCommandsConsumer.DELIVERY_TIMEOUT.toSeconds(),
+                PurgeCommandsConsumer.API_TIMEOUT.toSeconds(),
                 PurgeCommandsConsumer.MAX_BACKOFF.toSeconds(),
                 PurgeCommandsConsumer.POLL_EVERY.toSeconds(),
-                PurgeCommandsConsumer.PROBE_TIMEOUT.toSeconds(), ALIVE_STALL_FLOOR.toSeconds());
+                PurgeCommandsConsumer.PROBE_TIMEOUT.toSeconds(), FLOOR_MARGIN_PERCENT,
+                ALIVE_STALL_FLOOR.toSeconds());
         return ALIVE_STALL_FLOOR;
     }
 

@@ -21,6 +21,7 @@ import org.slf4j.MDC;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
@@ -60,10 +61,25 @@ public class PurgeCommandsConsumer {
      * constants so the two can never drift apart.
      */
     static final Duration DELIVERY_TIMEOUT = Duration.ofSeconds(30);
-    /** One in-flight request's timeout; two of these fit inside {@link #DELIVERY_TIMEOUT}. */
+    /**
+     * One in-flight request's timeout, producer AND consumer: two of these fit inside
+     * {@link #DELIVERY_TIMEOUT}, and one inside {@link #API_TIMEOUT}.
+     */
     static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(15);
     /** How long send() may block on metadata — the same bound as the delivery timeout. */
     static final Duration MAX_BLOCK = Duration.ofSeconds(30);
+
+    /**
+     * The CONSUMER's blocking clock, set EXPLICITLY for exactly the reason the producer's are:
+     * {@code commitSync()}, the rewind's {@code committed()} lookup and the broker probe below
+     * all wait up to {@code default.api.timeout.ms} on an unresponsive broker, and Kafka leaves
+     * that at 60s. One such call would already outlast half the /alive tolerance and two would
+     * break it, turning a broker outage into a "dead thread" restart — the very thing the
+     * producer's clocks were pinned down to prevent. 20s per API call (over 15s per in-flight
+     * request) bounds them well inside the tolerance, and {@link Main#ALIVE_STALL_FLOOR} is
+     * derived from this constant too, so the two cannot drift apart.
+     */
+    static final Duration API_TIMEOUT = Duration.ofSeconds(20);
 
     /** One poll's wait — also part of the /alive floor arithmetic in {@link Main}. */
     static final Duration POLL_EVERY = Duration.ofSeconds(1);
@@ -71,13 +87,20 @@ public class PurgeCommandsConsumer {
     /**
      * The /health honesty probe's cadence and patience: an EMPTY poll against a DEAD broker
      * returns normally, so an idle consumer would keep "completing" cycles and /health would
-     * stay 200 through an outage the javadoc promises it reports. Every {@code PROBE_EVERY_CYCLES}
-     * completed cycles the loop therefore asks the broker something that requires an ANSWER
-     * ({@code listTopics}); no answer within {@code PROBE_TIMEOUT} fails the cycle, freezes the
-     * readiness marker, and /health turns 503 — with commands flowing the cycles prove the broker
-     * anyway, so the probe only matters (and only costs) when the topic is quiet.
+     * stay 200 through an outage the javadoc promises it reports. The loop therefore asks the
+     * broker something that requires an ANSWER — the metadata of the ONE topic it consumes
+     * ({@code partitionsFor(COMMANDS_TOPIC)}, not the whole cluster's topic list) — on its first
+     * iteration and then at most once per {@code PROBE_EVERY}. The cadence is on the CLOCK, not
+     * on a cycle count, on purpose: with commands flowing a cycle takes milliseconds, and "every
+     * N cycles" would fire this round trip several times a second for nothing.
+     *
+     * <p>No answer within {@code PROBE_TIMEOUT} fails the cycle — and ONLY the cycle: nothing was
+     * consumed, so nothing is rewound (see the {@link BrokerSilent} catch in {@link #run}). The
+     * readiness marker freezes, /health turns 503, and the probe is retried every iteration; the
+     * retry backoff is what stretches noticing the broker's RETURN to at most one
+     * {@link #MAX_BACKOFF} (30s) after it starts answering again.
      */
-    static final int PROBE_EVERY_CYCLES = 10;
+    static final Duration PROBE_EVERY = Duration.ofSeconds(10);
     static final Duration PROBE_TIMEOUT = Duration.ofSeconds(5);
 
     private static final long DEFAULT_INITIAL_BACKOFF_MILLIS = 1_000;
@@ -121,8 +144,8 @@ public class PurgeCommandsConsumer {
      * cannot currently do its saga share", whether or not the thread itself is fine. "Broker
      * unreachable" is honest even on a QUIET topic: empty polls return normally against a dead
      * broker, so the loop backs its cycles with a periodic round-trip probe (see
-     * {@link #PROBE_EVERY_CYCLES}) — a broker that stops answering fails the probing cycle
-     * within {@code PROBE_EVERY_CYCLES} polls plus {@code PROBE_TIMEOUT}. That buys
+     * {@link #PROBE_EVERY}) — a broker that stops answering fails the probing cycle
+     * within {@code PROBE_EVERY} plus {@code PROBE_TIMEOUT}. That buys
      * visibility (the compose healthcheck marks the container unhealthy in
      * {@code docker compose ps}), not a restart — plain compose never restarts an unhealthy
      * container; an orchestrator (k3s, Swarm) acting on the same probe would.
@@ -226,7 +249,9 @@ public class PurgeCommandsConsumer {
         lastCycleNanos = System.nanoTime();   // readiness counts from the loop's start
         long backoffMillis = initialBackoffMillis;
         boolean rewindNeeded = false;
-        int cyclesSinceProbe = 0;
+        // the first iteration probes at once — a broker that is already gone must not need a
+        // cadence's grace before /health says so. Nanotime DIFFERENCES only, never absolutes
+        long nextProbeNanos = System.nanoTime();
         while (!Thread.currentThread().isInterrupted()) {
             // liveness first: the marker moves on EVERY iteration the scheduler grants us —
             // including the ones that will fail and back off — so /alive tracks the thread,
@@ -239,14 +264,12 @@ public class PurgeCommandsConsumer {
                     rewindToCommitted(consumer);
                     rewindNeeded = false;
                 }
-                if (cyclesSinceProbe >= PROBE_EVERY_CYCLES) {
-                    // the honesty probe (see PROBE_EVERY_CYCLES): empty polls prove nothing
-                    // about the broker, this round-trip does — and its TimeoutException on a
-                    // dead broker fails the cycle so /health can keep its "broker unreachable
-                    // shows here" promise. The counter resets only on the probe's SUCCESS: a
-                    // failing probe is retried every iteration until the broker answers again
-                    consumer.listTopics(PROBE_TIMEOUT);
-                    cyclesSinceProbe = 0;
+                if (System.nanoTime() - nextProbeNanos >= 0) {
+                    // the honesty probe (see PROBE_EVERY): empty polls prove nothing about the
+                    // broker, this round trip does. The next probe is scheduled only on SUCCESS,
+                    // so a failing one is retried every iteration until the broker answers
+                    probeBroker(consumer);
+                    nextProbeNanos = System.nanoTime() + PROBE_EVERY.toNanos();
                 }
                 ConsumerRecords<String, String> records = consumer.poll(POLL_EVERY);
                 for (ConsumerRecord<String, String> record : records) {
@@ -254,7 +277,6 @@ public class PurgeCommandsConsumer {
                 }
                 consumer.commitSync();
                 lastCycleNanos = System.nanoTime();
-                cyclesSinceProbe++;
                 backoffMillis = initialBackoffMillis;   // a full cycle worked: forgive the past
             } catch (InterruptException stopping) {
                 return;   // the JVM is going down; Kafka re-set the interrupt flag already
@@ -264,19 +286,70 @@ public class PurgeCommandsConsumer {
                 // request. Restore the flag for whoever joins us, and leave.
                 Thread.currentThread().interrupt();
                 return;
+            } catch (BrokerSilent silent) {
+                // the probe found nobody home. Unlike every other failure NOTHING was consumed
+                // here, so there is nothing to rewind — and setting the rewind flag would make
+                // the NEXT iteration walk committed() over the assignment (up to one
+                // default.api.timeout.ms) for not a single record's worth of gain, stretching
+                // the iteration, and with it the gap between two liveness beats, for nothing.
+                // Freeze readiness, back off, ask again.
+                LOG.warn("purge consumer got no answer from the broker, probing again in {} ms"
+                        + " (readiness stalls until it does)", backoffMillis, silent.getCause());
+                if (!backedOff(backoffMillis)) {
+                    return;
+                }
+                backoffMillis = grown(backoffMillis);
             } catch (Exception broken) {
                 rewindNeeded = true;
                 LOG.warn("purge consumer cycle failed, retrying uncommitted work in {} ms",
                         backoffMillis, broken);
-                try {
-                    Thread.sleep(backoffMillis);
-                } catch (InterruptedException interrupted) {
-                    Thread.currentThread().interrupt();
+                if (!backedOff(backoffMillis)) {
                     return;
                 }
-                backoffMillis = Math.min(backoffMillis * 2, MAX_BACKOFF_MILLIS);
+                backoffMillis = grown(backoffMillis);
             }
         }
+    }
+
+    /**
+     * The honesty probe itself: ONE metadata round trip, for the single topic this service
+     * consumes — {@code listTopics} would ask for every topic in the cluster, a needlessly fat
+     * answer for a question this narrow. Any failure becomes {@link BrokerSilent} so the loop can
+     * tell "the broker did not answer" (nothing consumed, nothing to rewind) from "handling
+     * failed" (a batch is in flight and must be redelivered); a stop request rides through
+     * untouched, or the shutdown would be swallowed as a broker problem.
+     */
+    private static void probeBroker(Consumer<String, String> consumer) {
+        try {
+            consumer.partitionsFor(COMMANDS_TOPIC, PROBE_TIMEOUT);
+        } catch (InterruptException stopping) {
+            throw stopping;
+        } catch (Exception unanswered) {
+            throw new BrokerSilent(unanswered);
+        }
+    }
+
+    /** The broker did not answer the probe — a failure with NO consumed batch behind it. */
+    private static final class BrokerSilent extends RuntimeException {
+        BrokerSilent(Throwable cause) {
+            super("the broker did not answer the readiness probe within " + PROBE_TIMEOUT, cause);
+        }
+    }
+
+    /** Sleep the backoff; false when the stop interrupt cut it short (flag already restored). */
+    private static boolean backedOff(long backoffMillis) {
+        try {
+            Thread.sleep(backoffMillis);
+            return true;
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
+    }
+
+    /** One second doubling to {@link #MAX_BACKOFF}, reset by any completed cycle. */
+    private static long grown(long backoffMillis) {
+        return Math.min(backoffMillis * 2, MAX_BACKOFF_MILLIS);
     }
 
     /** Purge one command and, if it was ours, publish the confirmation before returning. */
@@ -303,13 +376,27 @@ public class PurgeCommandsConsumer {
         }
     }
 
+    /**
+     * A failed cycle must not lose its records: poll() already advanced the in-memory position
+     * past them, so step every assigned partition back to its committed offset (or the beginning,
+     * matching auto.offset.reset=earliest) before retrying.
+     *
+     * <p>ONE bulk {@code committed(assignment)} call, never one per partition (the shape
+     * microservice-offboarding's KafkaLoop has always had): each such lookup waits up to
+     * {@code default.api.timeout.ms} on an unresponsive broker, so the per-partition loop turned a
+     * rewind on an N-partition topic into N of those waits inside a SINGLE iteration — no liveness
+     * beat for N times the clock, which is how a plain broker outage could walk past the /alive
+     * tolerance and earn a restart that fixes nothing.
+     */
     private static void rewindToCommitted(Consumer<String, String> consumer) {
-        for (TopicPartition partition : consumer.assignment()) {
-            OffsetAndMetadata committed = consumer.committed(Set.of(partition)).get(partition);
-            if (committed == null) {
+        Set<TopicPartition> assignment = consumer.assignment();
+        Map<TopicPartition, OffsetAndMetadata> committed = consumer.committed(assignment);
+        for (TopicPartition partition : assignment) {
+            OffsetAndMetadata offset = committed.get(partition);
+            if (offset == null) {
                 consumer.seekToBeginning(Set.of(partition));   // matches auto.offset.reset=earliest
             } else {
-                consumer.seek(partition, committed.offset());
+                consumer.seek(partition, offset.offset());
             }
         }
     }
@@ -319,7 +406,8 @@ public class PurgeCommandsConsumer {
         return header == null ? null : new String(header.value(), StandardCharsets.UTF_8);
     }
 
-    private static Properties consumerProps(String bootstrap) {
+    /** Package-private so the test can pin the clocks /alive's floor is derived from. */
+    static Properties consumerProps(String bootstrap) {
         Properties props = new Properties();
         props.put("bootstrap.servers", bootstrap);
         props.put("group.id", "user-collections");
@@ -327,6 +415,13 @@ public class PurgeCommandsConsumer {
         props.put("auto.offset.reset", "earliest");
         props.put("key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
         props.put("value.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
+        // the CONSUMER's clocks, EXPLICIT because /alive depends on them just as much as on the
+        // producer's (see API_TIMEOUT): commitSync(), the rewind's committed() lookup and the
+        // readiness probe each block up to default.api.timeout.ms, and Kafka's 60s default would
+        // let a single one of them eat most of the stall tolerance — the floor Main derives is
+        // computed from this very constant
+        props.put("default.api.timeout.ms", String.valueOf(API_TIMEOUT.toMillis()));
+        props.put("request.timeout.ms", String.valueOf(REQUEST_TIMEOUT.toMillis()));
         return props;
     }
 
