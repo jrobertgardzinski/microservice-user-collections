@@ -48,8 +48,11 @@ public class PurgeCommandsConsumer {
     private final long initialBackoffMillis;
 
     // the liveness marker /health watches: refreshed on every completed poll-handle-commit cycle
-    // (and when the loop starts, so a service still warming up is not born unhealthy)
-    private volatile long lastCycleMillis = System.currentTimeMillis();
+    // (and when the loop starts, so a service still warming up is not born unhealthy).
+    // System.nanoTime, not currentTimeMillis: the marker measures elapsed time, and the wall
+    // clock can jump (NTP step) — backwards would fake a 503, forwards would mask a real stall.
+    // Package-private so the health test can age the marker without waiting out a real stall.
+    volatile long lastCycleNanos = System.nanoTime();
 
     public PurgeCommandsConsumer(PurgeUserItems purgeUserItems, ObjectMapper mapper) {
         this(purgeUserItems, mapper, DEFAULT_INITIAL_BACKOFF_MILLIS);
@@ -65,11 +68,13 @@ public class PurgeCommandsConsumer {
 
     /**
      * True while the loop keeps completing cycles within the stall tolerance — the real liveness
-     * behind /health: a dead or wedged consumer thread stops refreshing the marker, /health turns
-     * 503, and the compose healthcheck restarts the container instead of admiring it.
+     * behind /health: a dead or wedged consumer thread stops refreshing the marker and /health
+     * turns 503. That buys visibility (the compose healthcheck marks the container unhealthy in
+     * {@code docker compose ps}), not a restart — plain compose never restarts an unhealthy
+     * container; an orchestrator (k3s, Swarm) acting on the same probe would.
      */
     public boolean healthy(Duration stallTolerance) {
-        return System.currentTimeMillis() - lastCycleMillis <= stallTolerance.toMillis();
+        return System.nanoTime() - lastCycleNanos <= stallTolerance.toNanos();
     }
 
     /**
@@ -146,7 +151,7 @@ public class PurgeCommandsConsumer {
      */
     void run(Consumer<String, String> consumer, Producer<String, String> producer) {
         consumer.subscribe(List.of(COMMANDS_TOPIC));
-        lastCycleMillis = System.currentTimeMillis();   // liveness counts from the loop's start
+        lastCycleNanos = System.nanoTime();   // liveness counts from the loop's start
         long backoffMillis = initialBackoffMillis;
         boolean rewindNeeded = false;
         while (!Thread.currentThread().isInterrupted()) {
@@ -162,7 +167,7 @@ public class PurgeCommandsConsumer {
                     handleRecord(record, producer);
                 }
                 consumer.commitSync();
-                lastCycleMillis = System.currentTimeMillis();
+                lastCycleNanos = System.nanoTime();
                 backoffMillis = initialBackoffMillis;   // a full cycle worked: forgive the past
             } catch (InterruptException stopping) {
                 return;   // the JVM is going down; Kafka re-set the interrupt flag already

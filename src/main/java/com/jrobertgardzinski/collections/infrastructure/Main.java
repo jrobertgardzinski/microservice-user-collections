@@ -22,11 +22,28 @@ import java.time.Duration;
  * <p>Without {@code KAFKA_BOOTSTRAP_SERVERS} the purge consumer never runs (dev, tests) — and then
  * /health has no loop to distrust. With Kafka, /health turns 503 once the consumer stops completing
  * cycles for longer than {@code COLLECTIONS_CONSUMER_STALL_SEC} (default 60), mirroring the
- * offboarding service's liveness so the compose healthcheck can restart a wedged container.
+ * offboarding service's liveness. That makes a wedged container *visible* (compose marks it
+ * unhealthy) — plain compose does not restart on an unhealthy probe; a restart is an
+ * orchestrator's job (k3s, Swarm) acting on the same signal.
  */
 public final class Main {
 
     private Main() {
+    }
+
+    /**
+     * Parse the stall tolerance, failing FAST but READABLY: a bare NumberFormatException
+     * ("For input string: ...") names neither the variable nor why the service died — this
+     * message does. Package-private for the test.
+     */
+    static long stallSeconds(String raw) {
+        try {
+            return Long.parseLong(raw.trim());
+        } catch (NumberFormatException invalid) {
+            throw new IllegalArgumentException(
+                    "COLLECTIONS_CONSUMER_STALL_SEC must be a whole number of seconds, got: \""
+                            + raw + "\"", invalid);
+        }
     }
 
     public static void main(String[] args) {
@@ -52,8 +69,8 @@ public final class Main {
             purgeConsumer = consumer;
         }
         PurgeCommandsConsumer watchedConsumer = purgeConsumer;
-        Duration consumerStall = Duration.ofSeconds(Long.parseLong(
-                System.getenv().getOrDefault("COLLECTIONS_CONSUMER_STALL_SEC", "60")));
+        Duration consumerStall = Duration.ofSeconds(
+                stallSeconds(System.getenv().getOrDefault("COLLECTIONS_CONSUMER_STALL_SEC", "60")));
 
         WebServer server = WebServer.builder()
                 .port(port)
@@ -64,8 +81,9 @@ public final class Main {
                         .get("/health", (req, res) -> {
                             // real liveness, not TCP-open: with Kafka configured this turns 503
                             // once the purge-consumer loop stops completing cycles for longer
-                            // than COLLECTIONS_CONSUMER_STALL_SEC, so the compose healthcheck
-                            // restarts a wedged container instead of admiring it
+                            // than COLLECTIONS_CONSUMER_STALL_SEC — the compose healthcheck then
+                            // shows the container as unhealthy (visibility; a restart would come
+                            // from an orchestrator acting on the same probe)
                             if (watchedConsumer == null || watchedConsumer.healthy(consumerStall)) {
                                 res.send("OK");
                             } else {

@@ -48,7 +48,7 @@ class JwtSecurityGateTest {
                 Instant.now().plusSeconds(3600), keys);
         // Tamper by flipping a bit in the signature's FIRST byte (the R point — always
         // significant), not by swapping the trailing base64 chars: an Ed25519 signature's last
-        // byte is the top byte of the scalar S < 2^252, so it lands in 0..16 — about 1 run in 16
+        // byte is the top byte of the scalar S < 2^252, so it lands in 0..15 — about 1 run in 16
         // it is exactly 4 ("BA"), and the old suffix swap to "BB" only touched the 4 trailing
         // base64 bits that the lenient URL decoder discards, leaving the signature semantically
         // intact and the test red.
