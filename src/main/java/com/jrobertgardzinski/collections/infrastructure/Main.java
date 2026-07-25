@@ -9,6 +9,7 @@ import com.jrobertgardzinski.collections.application.SaveItem;
 import io.helidon.webserver.WebServer;
 
 import javax.sql.DataSource;
+import java.time.Duration;
 
 /**
  * Boots the Helidon 4 SE WebServer (virtual threads) and wires the use cases to their adapters.
@@ -17,6 +18,11 @@ import javax.sql.DataSource;
  *
  * <p>Storage is Postgres when {@code DB_URL} is set, else in-memory H2. Every collections route is
  * gated by microservice-security's JWKS ({@code SECURITY_URL}, default the local security).
+ *
+ * <p>Without {@code KAFKA_BOOTSTRAP_SERVERS} the purge consumer never runs (dev, tests) — and then
+ * /health has no loop to distrust. With Kafka, /health turns 503 once the consumer stops completing
+ * cycles for longer than {@code COLLECTIONS_CONSUMER_STALL_SEC} (default 60), mirroring the
+ * offboarding service's liveness so the compose healthcheck can restart a wedged container.
  */
 public final class Main {
 
@@ -35,13 +41,19 @@ public final class Main {
                 new SaveItem(store), new RemoveItem(store), new ListItems(store), gate);
 
         // the account-deletion saga's third participant: consume purge commands off Kafka when a
-        // broker is configured (on a daemon virtual thread); without one, this simply never runs
+        // broker is configured (on a daemon virtual thread); without one, this simply never runs —
+        // and then /health has no loop to distrust (dev, tests: always OK)
         String bootstrap = System.getenv().getOrDefault("KAFKA_BOOTSTRAP_SERVERS", "").trim();
+        PurgeCommandsConsumer purgeConsumer = null;
         if (!bootstrap.isEmpty()) {
             PurgeCommandsConsumer consumer =
                     new PurgeCommandsConsumer(new PurgeUserItems(store), new ObjectMapper());
             Thread.ofVirtual().name("purge-consumer").start(() -> consumer.run(bootstrap));
+            purgeConsumer = consumer;
         }
+        PurgeCommandsConsumer watchedConsumer = purgeConsumer;
+        Duration consumerStall = Duration.ofSeconds(Long.parseLong(
+                System.getenv().getOrDefault("COLLECTIONS_CONSUMER_STALL_SEC", "60")));
 
         WebServer server = WebServer.builder()
                 .port(port)
@@ -49,7 +61,17 @@ public final class Main {
                         // CORS first: a preflight is answered before anything else runs
                         .addFilter(CorsFilter.fromEnv(System.getenv("COLLECTIONS_ALLOWED_ORIGINS")))
                         .addFilter(new CorrelationFilter())
-                        .get("/health", (req, res) -> res.send("OK"))
+                        .get("/health", (req, res) -> {
+                            // real liveness, not TCP-open: with Kafka configured this turns 503
+                            // once the purge-consumer loop stops completing cycles for longer
+                            // than COLLECTIONS_CONSUMER_STALL_SEC, so the compose healthcheck
+                            // restarts a wedged container instead of admiring it
+                            if (watchedConsumer == null || watchedConsumer.healthy(consumerStall)) {
+                                res.send("OK");
+                            } else {
+                                res.status(503).send("purge consumer stalled");
+                            }
+                        })
                         .get("/metrics", MetricsEndpoint::handle)
                         .register("/collections", collections))
                 .build()

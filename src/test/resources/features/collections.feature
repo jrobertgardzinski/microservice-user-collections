@@ -34,6 +34,20 @@ Feature: A user's collections of saved references
     When alice removes meme 42 from "favourites"
     Then the removal reports it was not there
 
+  # @http scenarios pin refusals that only exist at the wire — the application entry point never
+  # sees them, just as the HTTP entry point never sees the Kafka-borne @saga scenarios below.
+
+  @http
+  Scenario: A reference too long to be real is refused
+    When alice saves a meme with a reference too long to be real into "favourites"
+    Then the save is refused as nonsense
+    And alice's "favourites" is empty
+
+  @http
+  Scenario: Without an identity there are no collections
+    When somebody with no identity asks for "favourites"
+    Then the collections stay closed to them
+
   @saga
   Scenario: Deleting the account purges every collection
     Given alice has saved meme 42 into "favourites"
@@ -42,3 +56,10 @@ Feature: A user's collections of saved references
     Then 2 references were removed
     And alice's "favourites" is empty
     And alice's "watchlist" is empty
+
+  @saga
+  Scenario: A purge naming nobody is ignored
+    Given alice has saved meme 42 into "favourites"
+    When a purge command arrives naming nobody
+    Then no confirmation goes back to the orchestrator
+    And alice's "favourites" contains meme 42

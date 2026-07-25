@@ -29,6 +29,12 @@ import java.util.Optional;
  */
 public class CollectionsApi implements HttpService {
 
+    // the schema's column widths (V1__collection_items.sql): anything longer would only surface
+    // as a SQLException deep in the JDBC store (a 500), so the boundary answers 400 up front
+    private static final int MAX_COLLECTION_LENGTH = 64;
+    private static final int MAX_ITEM_TYPE_LENGTH = 64;
+    private static final int MAX_ITEM_ID_LENGTH = 128;
+
     private final SaveItem saveItem;
     private final RemoveItem removeItem;
     private final ListItems listItems;
@@ -55,6 +61,10 @@ public class CollectionsApi implements HttpService {
             res.status(Status.UNAUTHORIZED_401).send();
             return;
         }
+        if (!fitsItemPath(req)) {
+            res.status(Status.BAD_REQUEST_400).send();
+            return;
+        }
         SaveItem.Status status = saveItem.execute(user.get(),
                 req.path().pathParameters().get("collection"), itemOf(req));
         res.status(status == SaveItem.Status.SAVED ? Status.CREATED_201 : Status.OK_200).send();
@@ -64,6 +74,10 @@ public class CollectionsApi implements HttpService {
         Optional<String> user = authenticate(req);
         if (user.isEmpty()) {
             res.status(Status.UNAUTHORIZED_401).send();
+            return;
+        }
+        if (!fitsItemPath(req)) {
+            res.status(Status.BAD_REQUEST_400).send();
             return;
         }
         RemoveItem.Status status = removeItem.execute(user.get(),
@@ -77,6 +91,10 @@ public class CollectionsApi implements HttpService {
             res.status(Status.UNAUTHORIZED_401).send();
             return;
         }
+        if (!fitsCollection(req)) {
+            res.status(Status.BAD_REQUEST_400).send();
+            return;
+        }
         ArrayNode array = mapper.createArrayNode();
         for (ItemRef item : listItems.execute(user.get(), req.path().pathParameters().get("collection"))) {
             array.addObject().put("itemType", item.itemType()).put("itemId", item.itemId());
@@ -87,6 +105,16 @@ public class CollectionsApi implements HttpService {
         } catch (Exception unserialisable) {
             res.status(Status.INTERNAL_SERVER_ERROR_500).send();
         }
+    }
+
+    private static boolean fitsCollection(ServerRequest req) {
+        return req.path().pathParameters().get("collection").length() <= MAX_COLLECTION_LENGTH;
+    }
+
+    private static boolean fitsItemPath(ServerRequest req) {
+        return fitsCollection(req)
+                && req.path().pathParameters().get("itemType").length() <= MAX_ITEM_TYPE_LENGTH
+                && req.path().pathParameters().get("itemId").length() <= MAX_ITEM_ID_LENGTH;
     }
 
     private static ItemRef itemOf(ServerRequest req) {

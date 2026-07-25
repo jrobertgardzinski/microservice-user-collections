@@ -1,16 +1,19 @@
 package com.jrobertgardzinski.collections.appsteps;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jrobertgardzinski.collections.application.ListItems;
 import com.jrobertgardzinski.collections.application.PurgeUserItems;
 import com.jrobertgardzinski.collections.application.RemoveItem;
 import com.jrobertgardzinski.collections.application.SaveItem;
 import com.jrobertgardzinski.collections.domain.ItemRef;
 import com.jrobertgardzinski.collections.infrastructure.InMemoryCollectionStore;
+import com.jrobertgardzinski.collections.infrastructure.PurgeCommandsConsumer;
 import io.cucumber.java.en.Given;
 import io.cucumber.java.en.Then;
 import io.cucumber.java.en.When;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -23,10 +26,13 @@ public class CollectionsSteps {
     private final RemoveItem removeItem = new RemoveItem(store);
     private final ListItems listItems = new ListItems(store);
     private final PurgeUserItems purgeUserItems = new PurgeUserItems(store);
+    private final PurgeCommandsConsumer purgeConsumer =
+            new PurgeCommandsConsumer(purgeUserItems, new ObjectMapper());
 
     private SaveItem.Status lastSave;
     private RemoveItem.Status lastRemove;
     private int lastPurgeCount;
+    private Optional<String> lastConfirmation;
 
     @When("^(\\w+) saves (\\w+) (\\d+) into \"([^\"]+)\"$")
     @Given("^(\\w+) has saved (\\w+) (\\d+) into \"([^\"]+)\"$")
@@ -42,6 +48,18 @@ public class CollectionsSteps {
     @When("^(\\w+)'s account is purged$")
     public void accountPurged(String user) {
         lastPurgeCount = purgeUserItems.execute(user);
+    }
+
+    @When("^a purge command arrives naming nobody$")
+    public void purgeCommandNamingNobody() {
+        lastConfirmation = purgeConsumer.handle(
+                "{\"type\":\"PURGE_USER_CONTENT\",\"email\":\"\",\"sagaId\":\"saga-nobody\"}");
+    }
+
+    @Then("^no confirmation goes back to the orchestrator$")
+    public void noConfirmationGoesBack() {
+        assertTrue(lastConfirmation.isEmpty(),
+                "a confirmation would claim a purge happened that never did");
     }
 
     @Then("^the save reports it was already there$")

@@ -66,6 +66,33 @@ public class HttpCollectionsSteps {
         lastStatus = send(user, "DELETE", itemUri(collection, type, id));
     }
 
+    @When("^(\\w+) saves a (\\w+) with a reference too long to be real into \"([^\"]+)\"$")
+    public void savesTooLongReference(String user, String type, String collection) {
+        // one character wider than the widest reference the schema can hold (item_id VARCHAR(128))
+        lastStatus = send(user, "PUT", itemUri(collection, type, "x".repeat(129)));
+    }
+
+    @Then("^the save is refused as nonsense$")
+    public void saveWasRefused() {
+        assertEquals(400, lastStatus, "an impossible reference is refused at the boundary");
+    }
+
+    @When("^somebody with no identity asks for \"([^\"]+)\"$")
+    public void asksWithoutIdentity(String collection) {
+        try {
+            HttpRequest request = HttpRequest.newBuilder(
+                    URI.create(baseUrl + "/collections/" + collection + "/items")).GET().build();
+            lastStatus = http.send(request, HttpResponse.BodyHandlers.discarding()).statusCode();
+        } catch (Exception e) {
+            throw new IllegalStateException("unauthenticated GET failed", e);
+        }
+    }
+
+    @Then("^the collections stay closed to them$")
+    public void collectionsStayClosed() {
+        assertEquals(401, lastStatus, "no identity, no collections");
+    }
+
     @Then("^the save reports it was already there$")
     public void saveWasIdempotent() {
         assertEquals(200, lastStatus, "a repeated save answers 200 OK, not 201 Created");

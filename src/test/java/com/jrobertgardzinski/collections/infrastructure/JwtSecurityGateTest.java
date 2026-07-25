@@ -46,7 +46,16 @@ class JwtSecurityGateTest {
     void rejects_a_tampered_signature() throws Exception {
         String token = token("k1", "microservice-security", "alice@example.com",
                 Instant.now().plusSeconds(3600), keys);
-        String tampered = token.substring(0, token.length() - 2) + (token.endsWith("A") ? "BB" : "AA");
+        // Tamper by flipping a bit in the signature's FIRST byte (the R point — always
+        // significant), not by swapping the trailing base64 chars: an Ed25519 signature's last
+        // byte is the top byte of the scalar S < 2^252, so it lands in 0..16 — about 1 run in 16
+        // it is exactly 4 ("BA"), and the old suffix swap to "BB" only touched the 4 trailing
+        // base64 bits that the lenient URL decoder discards, leaving the signature semantically
+        // intact and the test red.
+        int dot = token.lastIndexOf('.');
+        byte[] sig = Base64.getUrlDecoder().decode(token.substring(dot + 1));
+        sig[0] ^= 0x01;
+        String tampered = token.substring(0, dot + 1) + B64.encodeToString(sig);
         assertTrue(gate.userFor(tampered).isEmpty());
     }
 

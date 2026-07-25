@@ -48,4 +48,16 @@ class PurgeCommandsConsumerTest {
     void a_malformed_command_is_dropped_not_thrown() {
         assertTrue(consumer.handle("not json at all").isEmpty());
     }
+
+    @Test
+    void a_purge_command_without_an_email_is_dropped_without_a_confirmation() {
+        store.add("alice@example.com", "favourites", new ItemRef("meme", "42"));
+
+        assertTrue(consumer.handle("{\"type\":\"PURGE_USER_CONTENT\",\"sagaId\":\"s-2\"}").isEmpty(),
+                "a missing email must not produce a confirmation");
+        assertTrue(consumer.handle(
+                        "{\"type\":\"PURGE_USER_CONTENT\",\"email\":\"\",\"sagaId\":\"s-3\"}").isEmpty(),
+                "an empty email must not produce a confirmation");
+        assertEquals(1, store.list("alice@example.com", "favourites").size(), "nothing purged");
+    }
 }

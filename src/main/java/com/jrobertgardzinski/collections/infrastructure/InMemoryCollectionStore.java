@@ -5,22 +5,25 @@ import com.jrobertgardzinski.collections.domain.ItemRef;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * A heap-only {@link CollectionStore}: the default when no {@code DB_URL} is set (dev), and the
- * store the application-layer tests drive. A {@link LinkedHashSet} per (user, collection) gives set
- * semantics (idempotent save) while remembering insertion order for a newest-first listing.
+ * A heap-only {@link CollectionStore} for the tests that want no JDBC at all (application-layer
+ * scenarios, the HTTP scenarios' store). The running service never uses it: {@link Main} always
+ * wires {@link JdbcCollectionStore}, over in-memory H2 when no {@code DB_URL} is set. A {@link
+ * LinkedHashSet} per (user, collection) gives set semantics (idempotent save) while remembering
+ * insertion order for a newest-first listing. Coarse {@code synchronized} methods are the whole
+ * concurrency story, so a plain {@link HashMap} underneath suffices.
  */
 public class InMemoryCollectionStore implements CollectionStore {
 
     private record Key(String user, String collection) {
     }
 
-    private final Map<Key, LinkedHashSet<ItemRef>> data = new ConcurrentHashMap<>();
+    private final Map<Key, LinkedHashSet<ItemRef>> data = new HashMap<>();
 
     @Override
     public synchronized boolean add(String user, String collection, ItemRef item) {
