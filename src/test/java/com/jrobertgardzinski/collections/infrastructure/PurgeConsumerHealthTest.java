@@ -112,23 +112,85 @@ class PurgeConsumerHealthTest {
     }
 
     @Test
-    void the_alive_floor_is_derived_from_the_loop_clocks_not_a_magic_number() {
-        // 2 x max(delivery.timeout, default.api.timeout, max backoff) + a poll + a broker probe,
-        // plus the margin — recomputed here from the same constants, so a drift on either side
-        // breaks the build
-        Duration longestBlock = longest(PurgeCommandsConsumer.DELIVERY_TIMEOUT,
-                PurgeCommandsConsumer.API_TIMEOUT, PurgeCommandsConsumer.MAX_BACKOFF);
-        Duration derived = longestBlock.multipliedBy(2)
-                .plus(PurgeCommandsConsumer.POLL_EVERY)
-                .plus(PurgeCommandsConsumer.PROBE_TIMEOUT);
-        assertEquals(Duration.ofSeconds(Math.ceilDiv(
-                        derived.toMillis() * (100 + Main.FLOOR_MARGIN_PERCENT) / 100, 1_000)),
-                Main.ALIVE_STALL_FLOOR);
-        assertTrue(Main.ALIVE_STALL_FLOOR.compareTo(derived) > 0,
-                "the floor must sit strictly ABOVE the bare arithmetic: alive() compares with"
-                        + " <=, and a GC pause on top of an honest worst case must not read dead");
-        assertTrue(Main.ALIVE_STALL_FLOOR.compareTo(Duration.ofSeconds(120)) < 0,
-                "the documented 120s default must sit above the floor");
+    void the_alive_floor_covers_the_whole_worst_legal_iteration() {
+        // The finding this pins. The floor used to be 2 x max(delivery.timeout, api.timeout,
+        // max backoff) + a poll + a probe = 83s, and the test recomputed that same formula —
+        // which passes no matter how wrong the formula is. A worst legal iteration actually
+        // spends its blocks in SEQUENCE, and back then they came to 106s: the "safe minimum" sat
+        // BELOW the case it was sold as covering. So the blocks are enumerated here from what
+        // one cycle really calls, in order, and the floor must COVER their sum.
+        Duration worstIteration = PurgeCommandsConsumer.API_TIMEOUT   // rewind: committed()
+                .plus(PurgeCommandsConsumer.PROBE_TIMEOUT)            // the /health honesty probe
+                .plus(PurgeCommandsConsumer.POLL_EVERY)               // poll()
+                .plus(Database.WORST_BLOCK)                           // the purge's own store work
+                .plus(PurgeCommandsConsumer.DELIVERY_TIMEOUT)         // the confirmation send
+                .plus(PurgeCommandsConsumer.API_TIMEOUT)              // commitSync()
+                .plus(PurgeCommandsConsumer.MAX_BACKOFF);             // the pause before the retry
+        assertEquals(worstIteration, Main.WORST_ITERATION,
+                "Main must add up the blocks a cycle really spends, in full");
+        assertTrue(Main.ALIVE_STALL_FLOOR.compareTo(worstIteration) > 0,
+                "the floor must sit strictly ABOVE the worst legal iteration: alive() compares"
+                        + " with <=, and a GC pause on top of an honest worst case must not read"
+                        + " dead. Floor " + Main.ALIVE_STALL_FLOOR.toSeconds() + "s vs iteration "
+                        + worstIteration.toSeconds() + "s");
+
+        // and the absolute values, spelled out: a silent drift in any constant above (or in the
+        // margin) has to break the build with the new number visible, not slide through
+        assertEquals(Duration.ofSeconds(146), Main.WORST_ITERATION,
+                "20 (committed) + 5 (probe) + 1 (poll) + 40 (database) + 30 (send)"
+                        + " + 20 (commit) + 30 (backoff)");
+        assertEquals(Duration.ofSeconds(183), Main.ALIVE_STALL_FLOOR, "146s + 25% margin");
+        assertEquals(Duration.ofSeconds(183), Main.ALIVE_STALL_FLOOR,
+                "and identical to microservice-offboarding's: one saga, one operational story");
+    }
+
+    @Test
+    void the_code_default_sits_above_the_floor_instead_of_being_corrected_by_it() {
+        // a default the floor silently raises is not a default: the javadoc, the k8s manifests
+        // and the operator would all be quoting a number the service never uses. 120s stopped
+        // being one the moment the floor was computed honestly (183s)
+        assertTrue(Main.DEFAULT_ALIVE_STALL.compareTo(Main.ALIVE_STALL_FLOOR) >= 0,
+                "COLLECTIONS_ALIVE_STALL_SEC's default (" + Main.DEFAULT_ALIVE_STALL.toSeconds()
+                        + "s) must not be below the floor (" + Main.ALIVE_STALL_FLOOR.toSeconds()
+                        + "s)");
+        assertEquals(Main.DEFAULT_ALIVE_STALL,
+                Main.flooredAliveStall("COLLECTIONS_ALIVE_STALL_SEC", Main.DEFAULT_ALIVE_STALL),
+                "and it must therefore pass through the floor untouched");
+    }
+
+    @Test
+    void the_database_clocks_are_a_term_of_the_floor_not_an_unbounded_wait() {
+        // the last unguarded block in the loop: pgjdbc leaves socketTimeout at 0 = forever, so a
+        // SILENT database (partition, frozen node, a purge DELETE behind somebody else's lock)
+        // used to wedge the loop thread with no bound — no beat, /alive 503, restart, same lock
+        assertTrue(Database.SOCKET_TIMEOUT.toSeconds() > 0,
+                "an unbounded socket read is an unbounded liveness gap");
+        assertTrue(Database.STATEMENT_TIMEOUT.compareTo(Database.SOCKET_TIMEOUT) < 0,
+                "the server-side cancel must fire BEFORE the client abandons the socket, or the"
+                        + " lock waiter outlives the connection that was waiting on it");
+        assertEquals(Database.CONNECTION_TIMEOUT.plus(Database.SOCKET_TIMEOUT),
+                Database.WORST_BLOCK,
+                "the two chain in the worst case: a near-full wait for a connection, then a"
+                        + " silent read on it");
+        assertTrue(Main.WORST_ITERATION.compareTo(Database.WORST_BLOCK) > 0,
+                "and the floor's arithmetic must actually carry that block");
+    }
+
+    @Test
+    void the_batch_is_capped_so_a_drained_backlog_cannot_outrun_the_poll_interval() {
+        // this loop confirms each record SYNCHRONOUSLY (send().get() per record), so a batch
+        // costs O(N) round trips. Kafka's default of 500 meant the first poll after an outage
+        // could hand back a backlog whose handling outlasts max.poll.interval.ms (300s) — the
+        // group drops the member, commitSync() fails, the retry re-handles the SAME oversized
+        // batch, and the loop livelocks on a rebalance it keeps causing
+        assertEquals(String.valueOf(PurgeCommandsConsumer.MAX_POLL_RECORDS),
+                PurgeCommandsConsumer.consumerProps("localhost:9092")
+                        .getProperty("max.poll.records"),
+                "max.poll.records must be set explicitly, never left at Kafka's 500");
+        assertTrue(PurgeCommandsConsumer.MAX_POLL_RECORDS < 500,
+                "the whole point is to sit below the default");
+        assertTrue(PurgeCommandsConsumer.MAX_POLL_RECORDS > 0,
+                "and a batch of nothing would starve the saga");
     }
 
     @Test
@@ -152,16 +214,6 @@ class PurgeConsumerHealthTest {
                 "two consumer API waits in one iteration must still fit inside the tolerance");
     }
 
-    private static Duration longest(Duration first, Duration... rest) {
-        Duration longest = first;
-        for (Duration candidate : rest) {
-            if (candidate.compareTo(longest) > 0) {
-                longest = candidate;
-            }
-        }
-        return longest;
-    }
-
     @Test
     void an_alive_stall_below_the_derived_floor_is_floored() {
         // below the floor a broker outage (a send legitimately blocked up to delivery.timeout,
@@ -174,8 +226,8 @@ class PurgeConsumerHealthTest {
 
     @Test
     void an_alive_stall_at_or_above_the_derived_floor_is_kept() {
-        assertEquals(Duration.ofSeconds(120),
-                Main.flooredAliveStall("COLLECTIONS_ALIVE_STALL_SEC", Duration.ofSeconds(120)));
+        assertEquals(Duration.ofSeconds(300),
+                Main.flooredAliveStall("COLLECTIONS_ALIVE_STALL_SEC", Duration.ofSeconds(300)));
         assertEquals(Main.ALIVE_STALL_FLOOR,
                 Main.flooredAliveStall("COLLECTIONS_ALIVE_STALL_SEC", Main.ALIVE_STALL_FLOOR));
     }

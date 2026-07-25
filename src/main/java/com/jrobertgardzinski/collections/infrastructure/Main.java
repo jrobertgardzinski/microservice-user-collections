@@ -29,8 +29,10 @@ import java.time.Duration;
  * broker (empty polls return normally against a dead one, so a quiet topic alone proves nothing).
  * {@code /alive} is
  * LIVENESS: 503 only once the loop thread itself stops being scheduled for longer than
- * {@code COLLECTIONS_ALIVE_STALL_SEC} (default 120, floored at {@link #ALIVE_STALL_FLOOR} derived
- * from the producer's delivery timeout and the retry backoff) — its marker is refreshed at the top of every
+ * {@code COLLECTIONS_ALIVE_STALL_SEC} (default 240, floored at {@link #ALIVE_STALL_FLOOR}, the SUM
+ * of every block one iteration can spend — the rewind lookup, the broker probe, the poll, the
+ * DATABASE, the confirmation send, the commit and the retry backoff, plus a
+ * margin) — its marker is refreshed at the top of every
  * iteration, failing and backoff ones included, so a database outage keeps /alive at 200 while
  * /health reports the stall. Restarting on /alive can heal a wedged process; restarting on /health
  * would just crash-loop against the broken dependency. Without {@code KAFKA_BOOTSTRAP_SERVERS} the
@@ -50,25 +52,54 @@ public final class Main {
      *  scheduler's own latency on top — an exactly-tight floor would call that a dead thread. */
     static final int FLOOR_MARGIN_PERCENT = 25;
 
-    /** The /alive stall tolerance's floor, DERIVED from the consumer loop's own clocks (never a
-     *  magic number — the same discipline as microservice-offboarding): during a broker outage
-     *  one iteration legitimately holds a confirmation send for up to
-     *  {@link PurgeCommandsConsumer#DELIVERY_TIMEOUT} (= {@link PurgeCommandsConsumer#MAX_BLOCK}),
-     *  a commit or a rewind lookup for up to {@link PurgeCommandsConsumer#API_TIMEOUT}, and then
-     *  backs off up to {@link PurgeCommandsConsumer#MAX_BACKOFF}, so the tolerance covers two of
-     *  the longest of those plus a poll and a broker probe, plus {@link #FLOOR_MARGIN_PERCENT} —
-     *  below that a mere broker outage could outlast the probe and read as a dead thread,
-     *  restarting a pod a restart cannot fix. Currently 83s; the 120s default sits above. */
-    static final Duration ALIVE_STALL_FLOOR = withMargin(
-            max(max(PurgeCommandsConsumer.DELIVERY_TIMEOUT, PurgeCommandsConsumer.API_TIMEOUT),
-                    PurgeCommandsConsumer.MAX_BACKOFF)
-                    .multipliedBy(2)
-                    .plus(PurgeCommandsConsumer.POLL_EVERY)
-                    .plus(PurgeCommandsConsumer.PROBE_TIMEOUT));
+    /**
+     * The worst LEGAL iteration of the purge loop, block by block — the sum of every clock one
+     * cycle can spend, in the order {@link PurgeCommandsConsumer#run} spends them. Written out as
+     * a sum on purpose: the floor used to be {@code 2 x max(...)} of the same clocks, a shape
+     * that LOOKS conservative and is not. Two of the longest block (30s) plus a poll and a probe
+     * came to 66s, while an honest worst iteration adds up to 146s — so the "safe minimum" sat
+     * well below the case it was sold as covering. Every term below is one real block:
+     *
+     * <ul>
+     *   <li>{@link PurgeCommandsConsumer#API_TIMEOUT} — the rewind's {@code committed()} lookup,
+     *       when the previous cycle failed</li>
+     *   <li>{@link PurgeCommandsConsumer#PROBE_TIMEOUT} — the /health honesty probe</li>
+     *   <li>{@link PurgeCommandsConsumer#POLL_EVERY} — the poll itself</li>
+     *   <li>{@link Database#WORST_BLOCK} — the purge's reads and writes; ONE such block, because
+     *       the first database failure throws out of the cycle and the records behind it are
+     *       never handled</li>
+     *   <li>{@link PurgeCommandsConsumer#DELIVERY_TIMEOUT} — the confirmation's
+     *       {@code send().get()} (= {@link PurgeCommandsConsumer#MAX_BLOCK} for a send still
+     *       waiting on metadata); one, not one per record, for the same reason — a silent broker
+     *       fails the FIRST send and the iteration ends there (which is why
+     *       {@link PurgeCommandsConsumer#MAX_POLL_RECORDS} guards a different failure)</li>
+     *   <li>{@link PurgeCommandsConsumer#API_TIMEOUT} again — {@code commitSync()}</li>
+     *   <li>{@link PurgeCommandsConsumer#MAX_BACKOFF} — the pause before the retry, paid INSIDE
+     *       the iteration that failed</li>
+     * </ul>
+     */
+    static final Duration WORST_ITERATION = PurgeCommandsConsumer.API_TIMEOUT
+            .plus(PurgeCommandsConsumer.PROBE_TIMEOUT)
+            .plus(PurgeCommandsConsumer.POLL_EVERY)
+            .plus(Database.WORST_BLOCK)
+            .plus(PurgeCommandsConsumer.DELIVERY_TIMEOUT)
+            .plus(PurgeCommandsConsumer.API_TIMEOUT)
+            .plus(PurgeCommandsConsumer.MAX_BACKOFF);
 
-    private static Duration max(Duration a, Duration b) {
-        return a.compareTo(b) >= 0 ? a : b;
-    }
+    /** The /alive stall tolerance's floor, DERIVED from the loop's own clocks (never a magic
+     *  number — the same discipline, and now the same arithmetic, as
+     *  microservice-offboarding): {@link #WORST_ITERATION} plus {@link #FLOOR_MARGIN_PERCENT}.
+     *  Below it a mere broker or database outage — every clock of which is legal and bounded —
+     *  would read as a dead thread, restarting a pod a restart cannot fix. Currently 183s
+     *  (146s + 25%); the 240s default sits above. */
+    static final Duration ALIVE_STALL_FLOOR = withMargin(WORST_ITERATION);
+
+    /** The code default for {@code COLLECTIONS_ALIVE_STALL_SEC}. A named constant, not a literal
+     *  in {@code main()}, so the test can assert the one property a default must have: that it
+     *  sits ABOVE {@link #ALIVE_STALL_FLOOR}. The previous 120s did not, once the floor was
+     *  computed honestly — and a default that the floor silently corrects is a lie in the
+     *  javadoc, the manifests and the operator's head at once. */
+    static final Duration DEFAULT_ALIVE_STALL = Duration.ofSeconds(240);
 
     /** The derived worst case plus {@link #FLOOR_MARGIN_PERCENT}, rounded UP to whole seconds —
      *  the tolerance is configured and logged in seconds, so the floor lives in them too. */
@@ -81,28 +112,34 @@ public final class Main {
     }
 
     /**
-     * The /alive tolerance floored at {@link #ALIVE_STALL_FLOOR}: a smaller configured value
-     * would let an iteration legitimately blocked by a broker outage (send held up to the
-     * delivery timeout, then the backoff) read as a wedged thread — the exact restart-loop the
-     * readiness/liveness split exists to prevent. Floored loudly, through the logger, where the
-     * service's own WARNs live. Package-private for the test.
+     * The /alive tolerance floored at {@link #ALIVE_STALL_FLOOR}: one iteration can legally spend
+     * EVERY block in {@link #WORST_ITERATION} back to back — they are alternatives only in the
+     * happy case, and a broker outage arriving on top of a slow database pays them in sequence —
+     * so a smaller configured value would let an outage read as a wedged thread, the exact
+     * restart-loop the readiness/liveness split exists to prevent. Floored loudly, through the
+     * logger, where the service's own WARNs live; the message spells the sum out term by term, so
+     * an operator told "below the floor" can see WHICH clocks add up to it. Package-private for
+     * the test.
      */
     static Duration flooredAliveStall(String name, Duration configured) {
         if (configured.compareTo(ALIVE_STALL_FLOOR) >= 0) {
             return configured;
         }
-        LOG.warn("{}={}s is below the {}s floor derived from the loop's clocks (2 x max of"
-                        + " delivery.timeout {}s, default.api.timeout {}s and max backoff {}s,"
-                        + " plus the {}s poll and the {}s broker probe, plus {}% margin) — a"
-                        + " broker outage legitimately holds an iteration that long, and a"
-                        + " smaller tolerance would let /alive restart the service over a broker"
+        LOG.warn("{}={}s is below the {}s floor, the SUM of one iteration's blocks (rewind"
+                        + " lookup {}s + broker probe {}s + poll {}s + database {}s + send {}s"
+                        + " + commit {}s + max backoff {}s = {}s, plus {}% margin) — an outage"
+                        + " legitimately holds an iteration that long, and a smaller tolerance"
+                        + " would let /alive restart the service over a broker or database"
                         + " problem; using {}s instead",
                 name, configured.toSeconds(), ALIVE_STALL_FLOOR.toSeconds(),
+                PurgeCommandsConsumer.API_TIMEOUT.toSeconds(),
+                PurgeCommandsConsumer.PROBE_TIMEOUT.toSeconds(),
+                PurgeCommandsConsumer.POLL_EVERY.toSeconds(),
+                Database.WORST_BLOCK.toSeconds(),
                 PurgeCommandsConsumer.DELIVERY_TIMEOUT.toSeconds(),
                 PurgeCommandsConsumer.API_TIMEOUT.toSeconds(),
                 PurgeCommandsConsumer.MAX_BACKOFF.toSeconds(),
-                PurgeCommandsConsumer.POLL_EVERY.toSeconds(),
-                PurgeCommandsConsumer.PROBE_TIMEOUT.toSeconds(), FLOOR_MARGIN_PERCENT,
+                WORST_ITERATION.toSeconds(), FLOOR_MARGIN_PERCENT,
                 ALIVE_STALL_FLOOR.toSeconds());
         return ALIVE_STALL_FLOOR;
     }
@@ -156,13 +193,16 @@ public final class Main {
         PurgeCommandsConsumer watchedConsumer = purgeConsumer;
         Duration consumerStall = Duration.ofSeconds(stallSeconds("COLLECTIONS_CONSUMER_STALL_SEC",
                 System.getenv().getOrDefault("COLLECTIONS_CONSUMER_STALL_SEC", "60")));
-        // 120s default: covers the worst legitimate iteration gap during a broker outage — a
-        // confirmation send blocked up to delivery.timeout (30s) plus one max backoff (30s) —
-        // with room to spare; the floor is derived from those same constants (ALIVE_STALL_FLOOR)
-        // so a smaller configured value cannot turn a broker outage into a fake dead-thread 503
+        // 240s default: it has to sit ABOVE ALIVE_STALL_FLOOR, and the floor is now the honest
+        // SUM of one iteration's blocks (rewind lookup 20s + probe 5s + poll 1s + database 40s +
+        // send 30s + commit 20s + backoff 30s = 146s, plus 25% margin = 183s) rather than the
+        // 2 x max(...) shape that used to under-count it at 83s. The old 120s default was BELOW
+        // that honest floor, so every boot would have been silently floored — a default that
+        // needs correcting is not a default
         Duration aliveStall = flooredAliveStall("COLLECTIONS_ALIVE_STALL_SEC",
                 Duration.ofSeconds(stallSeconds("COLLECTIONS_ALIVE_STALL_SEC",
-                        System.getenv().getOrDefault("COLLECTIONS_ALIVE_STALL_SEC", "120"))));
+                        System.getenv().getOrDefault("COLLECTIONS_ALIVE_STALL_SEC",
+                                String.valueOf(DEFAULT_ALIVE_STALL.toSeconds())))));
 
         WebServer server = WebServer.builder()
                 .port(port)

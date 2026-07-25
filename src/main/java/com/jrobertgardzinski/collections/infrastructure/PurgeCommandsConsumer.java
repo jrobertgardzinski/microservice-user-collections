@@ -55,8 +55,9 @@ public class PurgeCommandsConsumer {
      * The producer's delivery clocks, set EXPLICITLY because /alive depends on them (the same
      * discipline as microservice-offboarding's KafkaLoop): the confirmation's {@code send().get()}
      * during a broker outage blocks a loop iteration for up to {@code delivery.timeout.ms} — with
-     * Kafka's default of 120s one such iteration would outlast the /alive stall tolerance (same
-     * default 120s) and a mere broker outage would read as a dead thread. 30s bounds the block
+     * Kafka's default of 120s this ONE block would be four times the next-largest term in
+     * {@link Main#WORST_ITERATION} and would drag the derived floor past four minutes, so a mere
+     * broker outage would either read as a dead thread or force an absurd tolerance. 30s bounds the block
      * well inside the tolerance; {@link Main#ALIVE_STALL_FLOOR} is derived from these same
      * constants so the two can never drift apart.
      */
@@ -83,6 +84,28 @@ public class PurgeCommandsConsumer {
 
     /** One poll's wait — also part of the /alive floor arithmetic in {@link Main}. */
     static final Duration POLL_EVERY = Duration.ofSeconds(1);
+
+    /**
+     * How many commands one poll may hand back. Kafka's default is 500, and this loop confirms
+     * each record SYNCHRONOUSLY — {@code send().get()} inside the record loop — so the cost of a
+     * batch is O(N) round trips, not one. That is affordable while the broker answers in
+     * milliseconds; it stops being affordable exactly when it matters. After a longer outage the
+     * first poll drains the whole backlog, and 500 records against a broker that is slow rather
+     * than absent can walk the iteration past {@code max.poll.interval.ms} (Kafka's default,
+     * 300s) — the group then considers this member gone, rebalances, and the {@code commitSync()}
+     * at the end of the cycle fails with CommitFailedException. The retry path rewinds and
+     * re-handles the SAME oversized batch, which takes just as long, which times out again: a
+     * livelock, healed only by a human. 50 keeps a drained backlog to batches the loop can finish
+     * and commit, at the price of more polls — and more polls is precisely what a recovering
+     * consumer wants, since each one refreshes the liveness beat and the readiness marker.
+     *
+     * <p>The cap is about the DEGRADED-but-answering broker. It is deliberately NOT a term in
+     * {@link Main#ALIVE_STALL_FLOOR}: when the broker is truly silent the FIRST record's
+     * {@code send().get()} spends one {@link #DELIVERY_TIMEOUT} and throws straight out of the
+     * record loop, so a failing iteration pays one send, never fifty (the same argument that lets
+     * the floor count one database block rather than one per record).
+     */
+    static final int MAX_POLL_RECORDS = 50;
 
     /**
      * The /health honesty probe's cadence and patience: an EMPTY poll against a DEAD broker
@@ -145,7 +168,12 @@ public class PurgeCommandsConsumer {
      * unreachable" is honest even on a QUIET topic: empty polls return normally against a dead
      * broker, so the loop backs its cycles with a periodic round-trip probe (see
      * {@link #PROBE_EVERY}) — a broker that stops answering fails the probing cycle
-     * within {@code PROBE_EVERY} plus {@code PROBE_TIMEOUT}. That buys
+     * within {@code PROBE_EVERY} plus {@code PROBE_TIMEOUT}. That cadence is PART of the
+     * detection time, so the configured tolerance is not the whole promise: a broker that dies
+     * the instant AFTER a successful probe leaves the marker moving for up to one
+     * {@code PROBE_EVERY} (10s) before the next probe even asks, plus its {@code PROBE_TIMEOUT}
+     * (5s) — a 60s {@code COLLECTIONS_CONSUMER_STALL_SEC} really means "noticed within about
+     * 75s". Read the env as the tolerance it is, not as a detection deadline. That buys
      * visibility (the compose healthcheck marks the container unhealthy in
      * {@code docker compose ps}), not a restart — plain compose never restarts an unhealthy
      * container; an orchestrator (k3s, Swarm) acting on the same probe would.
@@ -317,7 +345,13 @@ public class PurgeCommandsConsumer {
      * answer for a question this narrow. Any failure becomes {@link BrokerSilent} so the loop can
      * tell "the broker did not answer" (nothing consumed, nothing to rewind) from "handling
      * failed" (a batch is in flight and must be redelivered); a stop request rides through
-     * untouched, or the shutdown would be swallowed as a broker problem.
+     * untouched, or the shutdown would be reported as a broker problem.
+     *
+     * <p>The interrupt is the ONLY stop signal here — nothing ever calls {@code wakeup()} on this
+     * consumer — so {@link InterruptException} is the only shield this probe needs. The mirror
+     * image of microservice-offboarding's KafkaLoop, whose shutdown() sends BOTH a wakeup and an
+     * interrupt and whose probe therefore shields both; between them the pair is now symmetric,
+     * each shielding exactly the signals its own shutdown can deliver.
      */
     private static void probeBroker(Consumer<String, String> consumer) {
         try {
@@ -422,6 +456,9 @@ public class PurgeCommandsConsumer {
         // computed from this very constant
         props.put("default.api.timeout.ms", String.valueOf(API_TIMEOUT.toMillis()));
         props.put("request.timeout.ms", String.valueOf(REQUEST_TIMEOUT.toMillis()));
+        // the batch's size, EXPLICIT because this loop pays its confirmation ack PER RECORD
+        // (send().get() inside the record loop, see handleRecord) — see MAX_POLL_RECORDS
+        props.put("max.poll.records", String.valueOf(MAX_POLL_RECORDS));
         return props;
     }
 
