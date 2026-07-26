@@ -1,0 +1,16 @@
+-- The SECOND access axis. Everything this service did until now asked one question — "what did
+-- THIS USER save?" — and V1's idx_collection_items_user answers it. The deletion cascade asks the
+-- mirror question: "who saved THIS ITEM?", across every user and every collection. No existing
+-- index answers that one: without this index a single MEME_DELETED would sequentially scan
+-- collection_items, and a COMMENTS_DELETED carrying a busy thread's ids would scan it once per id.
+--
+-- (item_type, item_id), not item_id alone: item_id is OPAQUE here (see ItemRef) — this service
+-- shares no invariant with the source domain, so two sources may perfectly well mint the same id,
+-- and the type is the only thing that keeps a comment's purge off a meme's rows. The type comes
+-- first because it is also the prefix of any future "all refs of this kind" question; the pair is
+-- the only lookup the cascade ever performs.
+--
+-- Plain CREATE INDEX, not CONCURRENTLY: Flyway runs migrations inside a transaction and
+-- CONCURRENTLY cannot, and this table is small (one row per saved reference per user). A future
+-- deployment with a large table should move this to its own out-of-band migration instead.
+CREATE INDEX idx_collection_items_item ON collection_items (item_type, item_id);

@@ -1,0 +1,49 @@
+# The favourites UI, plus exactly ONE reverse proxy: /memes/... is forwarded to the gallery so the
+# browser can ask "does this meme still exist?" from the SAME origin.
+#
+# Why a proxy and not just another cross-origin fetch (this UI already makes two). The gallery
+# serves its own UI from its own origin and therefore sends no CORS headers at all. A cross-origin
+# probe from this origin would be blocked by the browser and would arrive in the page as a bare
+# network error — indistinguishable from a timeout, and this UI's read-repair rule (src/refs.ts)
+# turns on being able to tell an explicit "not found" apart from "we could not find out". Without
+# a real HTTP status every tile would sit in the honest-but-useless "couldn't check" state.
+#
+# Everything else stays cross-origin on purpose: talking to security and user-collections from a
+# separate origin is what this UI exists to exercise.
+#
+# Substituted by the nginx image's envsubst entrypoint; NGINX_ENVSUBST_FILTER (see the Dockerfile)
+# keeps it to the MEMES_* names so nginx's own $variables survive.
+server {
+    listen 80;
+    # Dual-stack, spelled out here because this file is why it has to be. The nginx image's
+    # entrypoint adds the IPv6 listener itself — but in 10-listen-on-ipv6-by-default.sh, which
+    # runs BEFORE 20-envsubst-on-templates.sh renders this template over conf.d/default.conf, so
+    # its edit is overwritten by the very file it was meant to patch. Without the line the
+    # container listens on IPv4 only, busybox wget resolves the healthcheck's "localhost" to ::1,
+    # and the container never turns healthy — the page serving perfectly the whole time.
+    listen [::]:80;
+    server_name _;
+
+    location /memes/ {
+        # The upstream lives in a VARIABLE on purpose. With a literal host, nginx resolves it once
+        # at startup and REFUSES TO BOOT while the gallery is down — a UI that cannot start because
+        # an optional check is unavailable is worse than the check being unavailable. Resolved per
+        # request instead, a missing gallery is a 502, which the page reads as "couldn't check":
+        # the safe answer, and the one it is designed to render.
+        resolver ${MEMES_RESOLVER} valid=10s ipv6=off;
+        set $upstream ${MEMES_UPSTREAM};
+        proxy_pass $upstream$request_uri;
+        proxy_set_header Host $host;
+        # keep the trace going if the page ever sends one (nginx drops empty headers)
+        proxy_set_header X-Correlation-Id $http_x_correlation_id;
+        # the checks are cheap and frequent; do not let one slow gallery hold a worker for a
+        # minute, and do not outlast the page's own RESOLVE_TIMEOUT_MS
+        proxy_connect_timeout 2s;
+        proxy_read_timeout 5s;
+    }
+
+    location / {
+        root /usr/share/nginx/html;
+        try_files $uri /index.html;   # a single-page app: every path resolves to the bundle
+    }
+}

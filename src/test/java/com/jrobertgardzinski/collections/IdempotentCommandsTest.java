@@ -1,5 +1,6 @@
 package com.jrobertgardzinski.collections;
 
+import com.jrobertgardzinski.collections.application.PurgeDeletedItem;
 import com.jrobertgardzinski.collections.application.PurgeUserItems;
 import com.jrobertgardzinski.collections.application.RemoveItem;
 import com.jrobertgardzinski.collections.application.SaveItem;
@@ -44,6 +45,10 @@ class IdempotentCommandsTest {
                 store -> new RemoveItem(store).execute("alice", "favourites", COMMENT_7));
         c.put("purge the whole account",
                 store -> new PurgeUserItems(store).execute("alice"));
+        c.put("purge a deleted item everyone's collections may point at",
+                store -> new PurgeDeletedItem(store).execute("comment", List.of("7")));
+        c.put("purge a deleted item nobody saved",
+                store -> new PurgeDeletedItem(store).execute("meme", List.of("does-not-exist")));
         return c;
     }
 

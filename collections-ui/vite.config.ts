@@ -9,5 +9,11 @@ export default defineConfig({
   resolve: {
     alias: { 'react-native': 'react-native-web' },
   },
-  server: { port: 5173 },
+  server: {
+    port: 5173,
+    // the dev-server twin of nginx.conf.template's /memes/ location: the favourites view resolves
+    // its references same-origin, because only a real HTTP status can tell "the gallery does not
+    // have this" apart from "the gallery did not answer" (src/refs.ts)
+    proxy: { '/memes': 'http://localhost:8083' },
+  },
 });

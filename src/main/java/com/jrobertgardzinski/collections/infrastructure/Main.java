@@ -1,8 +1,8 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.jrobertgardzinski.collections.application.CollectionStore;
 import com.jrobertgardzinski.collections.application.ListItems;
+import com.jrobertgardzinski.collections.application.PurgeDeletedItem;
 import com.jrobertgardzinski.collections.application.PurgeUserItems;
 import com.jrobertgardzinski.collections.application.RemoveItem;
 import com.jrobertgardzinski.collections.application.SaveItem;
@@ -41,6 +41,15 @@ import java.time.Duration;
  * start a stall, so it refuses to boot, naming the variable. The probes buy *visibility* (compose
  * marks the container unhealthy) — plain compose does not restart on an unhealthy probe; a restart
  * is an orchestrator's job (k3s, Swarm) acting on the same signal.
+ *
+ * <p><b>Two Kafka threads, two different promises.</b> {@link PurgeCommandsConsumer} is the saga
+ * participant described above — orchestrated, confirmed, retried forever, watched by both probes.
+ * {@link CascadeConsumer} is the deletion cascade — choreographed, unconfirmed, best-effort, in
+ * its own consumer group and watched by NEITHER probe. The split is deliberate and argued in
+ * {@link CascadeConsumer}'s javadoc; the short version is that a stalled cleanup must never be
+ * able to report this instance as unable to do its saga share. Without
+ * {@code KAFKA_BOOTSTRAP_SERVERS} neither runs (dev, tests) — and then the probes have no loop to
+ * distrust and both stay 200.
  */
 public final class Main {
 
@@ -173,7 +182,9 @@ public final class Main {
         String securityUrl = System.getenv().getOrDefault("SECURITY_URL", "http://localhost:8080");
 
         DataSource dataSource = Database.migratedDataSource();
-        CollectionStore store = new JdbcCollectionStore(dataSource);
+        // the concrete type, not the CollectionStore port: this one adapter answers BOTH ports —
+        // the user axis the API and the saga use, and the item axis the cascade uses (V2's index)
+        JdbcCollectionStore store = new JdbcCollectionStore(dataSource);
         SecurityGate gate = new JwtSecurityGate(securityUrl);
 
         CollectionsApi collections = new CollectionsApi(
@@ -189,6 +200,15 @@ public final class Main {
                     new PurgeCommandsConsumer(new PurgeUserItems(store), new ObjectMapper());
             Thread.ofVirtual().name("purge-consumer").start(() -> consumer.run(bootstrap));
             purgeConsumer = consumer;
+
+            // the deletion CASCADE, on a thread and a consumer group of its OWN (see
+            // CascadeConsumer's javadoc for the full argument): choreographed, best-effort, no
+            // confirmation and no compensation. Deliberately absent from the two probes below —
+            // a stalled cleanup is a cleanup debt, not an instance that cannot serve, and a
+            // /health that reddens for cleanup debt is a /health operators learn to ignore
+            CascadeConsumer cascade =
+                    new CascadeConsumer(new PurgeDeletedItem(store), new ObjectMapper());
+            Thread.ofVirtual().name("cascade-consumer").start(() -> cascade.run(bootstrap));
         }
         PurgeCommandsConsumer watchedConsumer = purgeConsumer;
         Duration consumerStall = Duration.ofSeconds(stallSeconds("COLLECTIONS_CONSUMER_STALL_SEC",
