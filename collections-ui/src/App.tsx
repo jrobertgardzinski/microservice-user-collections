@@ -97,8 +97,13 @@ function SignIn({ onSignedIn }: { onSignedIn: (token: string, email: string) => 
 
 function Favourites({ token, who, signOut }: { token: string; who: string; signOut: () => void }) {
   const [items, setItems] = useState<Ref[] | null>(null);
+  // "we could not find out" is a THIRD state next to "here is your list" and "your list is empty" —
+  // the same discipline refs.ts already applies to a single reference (gone vs unknown), now for the
+  // whole list. Collapsing them printed "Nothing saved yet" over a service that was merely restarting.
+  const [listError, setListError] = useState<string | null>(null);
   const [itemType, setItemType] = useState('meme');
   const [itemId, setItemId] = useState('');
+  const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   // what we know about each saved reference. Read-only knowledge: nothing in this component ever
   // deletes anything because of what lands here — see refs.ts for why that is a hard rule
@@ -120,9 +125,23 @@ function Favourites({ token, who, signOut }: { token: string; who: string; signO
         signOut();
         return;
       }
-      setItems(await response.json());
+      if (!response.ok) {
+        // a status is the service talking about ITSELF; it says nothing about what is in the
+        // collection, so the list is not touched and the screen says which it is
+        setListError(`The collections service answered ${response.status}.`);
+        return;
+      }
+      // an answer with no body (or a body that is not a list) used to make json() throw inside the
+      // try, leave items at null, and park the screen on a spinner that never stopped
+      const body: unknown = await response.json().catch(() => null);
+      if (!Array.isArray(body)) {
+        setListError('The collections service answered with something that is not a list.');
+        return;
+      }
+      setItems(body as Ref[]);
+      setListError(null);
     } catch {
-      setNotice('Collections service unreachable.');
+      setListError('Collections service unreachable.');
     }
   }, [authorized, signOut]);
 
@@ -149,19 +168,61 @@ function Favourites({ token, who, signOut }: { token: string; who: string; signO
   }, [items]);
 
   const save = async () => {
-    if (!itemType.trim() || !itemId.trim()) {
+    const type = itemType.trim();
+    const id = itemId.trim();
+    if (!type || !id) {
       setNotice('An item needs both a type and an id.');
       return;
     }
     setNotice(null);
-    await authorized(`/${itemType.trim()}/${itemId.trim()}`, 'PUT');
-    setItemId('');
-    load();
+    setBusy(true);
+    try {
+      // BOTH segments encoded. Raw concatenation meant an id containing a slash (anybody pasting a
+      // URL) addressed a different endpoint entirely, and a '?' or '#' truncated the request — the
+      // server then answered honestly about a path nobody meant to call
+      const response = await authorized(
+        `/${encodeURIComponent(type)}/${encodeURIComponent(id)}`, 'PUT');
+      if (response.status === 401) {
+        signOut();
+        return;
+      }
+      if (!response.ok) {
+        // the typed value STAYS in the field — it was the only copy, and clearing it before the
+        // server had accepted anything is how the same id got retyped over and over
+        setNotice(response.status === 400
+          ? 'That type or id was refused — check it (ids are at most 128 characters).'
+          : `Not saved — the collections service answered ${response.status}.`);
+        return;
+      }
+      setItemId('');            // cleared only now, on a confirmed save
+      await load();
+    } catch {
+      setNotice('Collections service unreachable — nothing was saved.');
+    } finally {
+      setBusy(false);
+    }
   };
 
   const remove = async (ref: Ref) => {
-    await authorized(`/${ref.itemType}/${ref.itemId}`, 'DELETE');
-    load();
+    setNotice(null);
+    try {
+      const response = await authorized(
+        `/${encodeURIComponent(ref.itemType)}/${encodeURIComponent(ref.itemId)}`, 'DELETE');
+      if (response.status === 401) {
+        signOut();
+        return;
+      }
+      // 404 is a SUCCESS: the entry is not there, which is exactly what the click asked for.
+      // Removing is idempotent, and reporting "it failed" for an entry that is already gone leaves
+      // a button that can never succeed
+      if (!response.ok && response.status !== 404) {
+        setNotice(`Not removed — the collections service answered ${response.status}.`);
+        return;
+      }
+      await load();
+    } catch {
+      setNotice('Collections service unreachable — nothing was removed.');
+    }
   };
 
   return (
@@ -192,12 +253,25 @@ function Favourites({ token, who, signOut }: { token: string; who: string; signO
             onChangeText={setItemId}
             onSubmitEditing={save}
           />
-          <Pressable style={styles.button} onPress={save}>
-            <Text style={styles.buttonText}>Save</Text>
+          <Pressable style={styles.button} onPress={save} disabled={busy}>
+            {busy ? <ActivityIndicator color="#101418" />
+                  : <Text style={styles.buttonText}>Save</Text>}
           </Pressable>
         </View>
         {notice && <Text style={styles.notice}>{notice}</Text>}
-        {items === null ? (
+        {listError !== null ? (
+          // an unanswered question, rendered as one: no "nothing saved yet", and a way to ask again
+          // without reaching for F5
+          <View style={styles.errorBox}>
+            <Text style={styles.notice}>{listError}</Text>
+            <Text style={styles.hint}>
+              This is a service problem, not an empty collection — nothing has been lost.
+            </Text>
+            <Pressable style={styles.repairButton} onPress={load}>
+              <Text style={styles.repairButtonText}>try again</Text>
+            </Pressable>
+          </View>
+        ) : items === null ? (
           <ActivityIndicator color="#7fd1b9" />
         ) : items.length === 0 ? (
           <Text style={styles.empty}>Nothing saved yet — refs land here newest first.</Text>
@@ -292,6 +366,8 @@ const styles = StyleSheet.create({
   buttonText: { color: '#101418', fontWeight: '700' },
   notice: { color: '#f2b8b5', fontSize: 13 },
   empty: { color: '#8a97a3', fontSize: 13, fontStyle: 'italic' },
+  // "we could not find out" gets its own block with a retry — never the empty-collection sentence
+  errorBox: { gap: 6, alignItems: 'flex-start' },
   list: { maxHeight: 320 },
   itemRow: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
