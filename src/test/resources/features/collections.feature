@@ -56,6 +56,9 @@ Feature: A user's collections of saved references
     Then 2 references were removed
     And alice's "favourites" is empty
     And alice's "watchlist" is empty
+    # The saga has two halves and only the refusal half was ever asserted: the suite proved that a
+    # malformed command produces NO confirmation, never that a good one produces the right one.
+    And a confirmation for that saga goes back to the orchestrator
 
   @saga
   Scenario: A purge naming nobody is ignored
