@@ -227,12 +227,20 @@ public class PurgeCommandsConsumer {
         // the saga id identifies the run in logs; the e-mail is PII and stays out of INFO lines
         LOG.info("purged {} collection refs of one leaver (saga {})", removed, sagaId);
         try {
-            return Optional.of(mapper.writeValueAsString(mapper.createObjectNode()
+            var confirmation = mapper.createObjectNode()
                     .put("type", "USER_CONTENT_PURGED")
-                    .put("sagaId", sagaId)
                     .put("email", email)
                     // envelope version (workspace ADR 0004): fields only ever added within version 1
-                    .put("version", 1)));
+                    .put("version", 1);
+            // A BLANK sagaId is worse than an absent one. The orchestrator drops a confirmation
+            // whose sagaId is present but unparseable — a deliberate poison-pill rule — while one
+            // with NO sagaId falls back to matching by e-mail. So a purge command that arrived
+            // without the field had its confirmation thrown away rather than matched, and the saga
+            // waited out its timeout for an answer that had in fact come back.
+            if (sagaId != null && !sagaId.isBlank()) {
+                confirmation.put("sagaId", sagaId);
+            }
+            return Optional.of(mapper.writeValueAsString(confirmation));
         } catch (Exception impossible) {
             throw new IllegalStateException("could not build confirmation", impossible);
         }
