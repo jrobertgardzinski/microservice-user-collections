@@ -4,6 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>My collections</title>
+    <!--
+      Where this page's API calls should go, decided by whoever deployed it rather than whoever
+      built it. A CLASSIC script, so it runs during parsing and therefore before the deferred module
+      below. Written at container start by ui-config.sh; a 404 here is harmless - the UI falls back
+      to the VITE_* values baked at build time and then to the compose defaults.
+    -->
+    <script src="/ui-config.js"></script>
     <style>
       html, body, #root { height: 100%; margin: 0; background: #101418; }
     </style>

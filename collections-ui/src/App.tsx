@@ -12,15 +12,29 @@ import {
 import { isResolvable, refKey, resolveMeme, type Resolution } from './refs';
 
 // The browser calls both services cross-origin — that is the point of this UI: it exercises the
-// CORS edge of user-collections (and rides security's existing one). Host-published ports by
-// default; a deployment overrides via VITE_*_URL at build time.
-const SECURITY = import.meta.env.VITE_SECURITY_URL ?? 'http://localhost:8080';
-const COLLECTIONS = import.meta.env.VITE_COLLECTIONS_URL ?? 'http://localhost:8092';
+// CORS edge of user-collections (and rides security's existing one).
+//
+// Addresses come from the DEPLOYMENT first (window.__PORTAL_CONFIG__, written by ui-config.sh at
+// container start and loaded by index.html before this module), then from the VITE_* values baked
+// at build time, then from compose's host-published ports. The chain exists because Vite bakes its
+// values into the bundle: one image carried one set of addresses, so the page served from a cluster
+// still aimed the browser at the developer's laptop.
+declare global {
+  interface Window {
+    __PORTAL_CONFIG__?: { securityUrl?: string; collectionsUrl?: string; memesUrl?: string };
+  }
+}
+
+const deployed = (key: 'securityUrl' | 'collectionsUrl' | 'memesUrl'): string | undefined =>
+  typeof window === 'undefined' ? undefined : window.__PORTAL_CONFIG__?.[key];
+
+const SECURITY = deployed('securityUrl') ?? import.meta.env.VITE_SECURITY_URL ?? 'http://localhost:8080';
+const COLLECTIONS = deployed('collectionsUrl') ?? import.meta.env.VITE_COLLECTIONS_URL ?? 'http://localhost:8092';
 
 // The gallery is the ONE call this UI makes same-origin (default: ''), through the nginx proxy in
 // front of the bundle — see nginx.conf.template. Cross-origin it would be blocked and every check would
 // come back "could not check", which is safe but useless.
-const MEMES = import.meta.env.VITE_MEMES_URL ?? '';
+const MEMES = deployed('memesUrl') ?? import.meta.env.VITE_MEMES_URL ?? '';
 
 type Ref = { itemType: string; itemId: string };
 
