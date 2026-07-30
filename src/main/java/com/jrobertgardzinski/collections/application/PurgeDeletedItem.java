@@ -8,7 +8,9 @@ import java.util.List;
  *
  * <p>The contrast with {@link PurgeUserItems} is the whole point of this use case existing
  * separately. That one serves the account-deletion SAGA: an orchestrator is waiting for a
- * confirmation, a missed purge is a broken GDPR promise, so the command is retried forever. This
+ * confirmation, a missed purge is a broken GDPR promise, so the command is retried hard — for a
+ * budget measured against the orchestrator's own patience, and then abandoned loudly rather than
+ * carried out after the saga gave up (see {@code PurgeCommandsConsumer.RETRY_BUDGET}). This
  * one serves a CHOREOGRAPHY: nobody is waiting, nobody confirms, nothing compensates. If it never
  * runs, the worst that survives is a row pointing at something that no longer exists — a dead
  * reference the UI is built to render honestly (see collections-ui) rather than an inconsistency

@@ -1,5 +1,8 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jrobertgardzinski.collections.application.CollectionStore;
@@ -15,7 +18,9 @@ import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.header.Header;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -54,7 +59,25 @@ class PurgeCommandsConsumerLoopTest {
     private final ObjectMapper mapper = new ObjectMapper();
     private final InMemoryCollectionStore store = new InMemoryCollectionStore();
 
+    private final ListAppender<ILoggingEvent> logLines = new ListAppender<>();
+
     private Thread loopThread;
+
+    /** The drop of an exhausted record is only worth anything if it is LOUD, so the log is read. */
+    @BeforeEach
+    void tapTheLog() {
+        logLines.start();
+        consumerLogger().addAppender(logLines);
+    }
+
+    @AfterEach
+    void untapTheLog() {
+        consumerLogger().detachAppender(logLines);
+    }
+
+    private static ch.qos.logback.classic.Logger consumerLogger() {
+        return (ch.qos.logback.classic.Logger) LoggerFactory.getLogger(PurgeCommandsConsumer.class);
+    }
 
     @AfterEach
     void stopLoop() throws InterruptedException {
@@ -102,8 +125,39 @@ class PurgeCommandsConsumerLoopTest {
                 "the confirmation must reach the broker BEFORE the offset commits");
     }
 
+    /**
+     * The confirmation's partition key names the SAGA, not the person (P18 poz. 38).
+     *
+     * <p>It used to be the incoming command's key, and the orchestrator keys commands by the
+     * leaver's address — so the address of the person being erased sat in plain sight on
+     * usercollections-events, for the topic's whole retention. The sibling service refuses to do
+     * that and explains why in its own javadoc; this participant just never got the same treatment.
+     */
     @Test
-    void a_store_failure_commits_nothing_and_the_loop_retries_after_backoff() throws Exception {
+    void the_confirmation_is_keyed_by_the_saga_never_by_the_leavers_address() throws Exception {
+        store.add("alice@example.com", "favourites", new ItemRef("meme", "42"));
+        MockProducer<String, String> producer =
+                new MockProducer<>(true, new StringSerializer(), new StringSerializer());
+        MockConsumer<String, String> consumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST);
+        // the incoming command IS keyed by the address (that is what the orchestrator sends)
+        prime(consumer, command(0, PURGE_ALICE));
+
+        startLoop(consumerUnderTest(store), consumer, producer);
+        await("the record's offset to commit", () -> committedOffset(consumer) >= 1);
+
+        ProducerRecord<String, String> confirmation = producer.history().get(0);
+        assertEquals("s-1", confirmation.key(),
+                "the saga id is the key: it names the case, survives redelivery unchanged, and"
+                        + " carries no personal data");
+        assertFalse(confirmation.key().contains("alice@example.com"),
+                "the leaver's address must never be the key — a broker tool shows keys to anyone"
+                        + " who can list the topic");
+    }
+
+    @Test
+    void a_store_failure_inside_the_budget_commits_nothing_and_the_loop_retries_after_backoff()
+            throws Exception {
+        long droppedBefore = PurgeCommandsConsumer.recordsDropped();
         store.add("alice@example.com", "favourites", new ItemRef("meme", "42"));
         MockProducer<String, String> producer =
                 new MockProducer<>(true, new StringSerializer(), new StringSerializer());
@@ -135,6 +189,9 @@ class PurgeCommandsConsumerLoopTest {
         assertEquals(1, producer.history().size(), "one confirmation, after the retry");
         assertTrue(store.list("alice@example.com", "favourites").isEmpty(), "purged on retry");
         assertTrue(loopThread.isAlive(), "an infrastructure failure must not kill the loop");
+        assertEquals(droppedBefore, PurgeCommandsConsumer.recordsDropped(),
+                "a hiccup healed well inside the retry budget must drop nothing: the budget only"
+                        + " bounds the retrying, it must not shorten it");
     }
 
     @Test
@@ -181,7 +238,9 @@ class PurgeCommandsConsumerLoopTest {
                 new MockProducer<>(true, new StringSerializer(), new StringSerializer());
         MockConsumer<String, String> consumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST);
         AtomicInteger failures = new AtomicInteger();
-        // the poison-pill shape: every retry finds the database just as broken as the last one
+        // the poison-pill shape: every retry finds the database just as broken as the last one.
+        // The consumer under test keeps the PRODUCTION budget (90s), so this whole test plays out
+        // while the record's deadline is still far away — the drop that follows it has its own test
         CollectionStore alwaysFailing = new DelegatingStore(store) {
             @Override
             public int purgeUser(String user) {
@@ -203,7 +262,95 @@ class PurgeCommandsConsumerLoopTest {
                         + " marker at the top of every failing/backoff pass");
         assertFalse(purge.healthy(Duration.ofMillis(50)),
                 "/health reports the stall: not one cycle has completed since the loop started");
-        assertEquals(-1, committedOffset(consumer), "the failing batch must never commit");
+        assertEquals(-1, committedOffset(consumer),
+                "the failing batch must not commit while the record's retry budget is unspent");
+    }
+
+    @Test
+    void a_record_still_failing_when_its_budget_ends_is_dropped_loudly_committed_and_counted()
+            throws Exception {
+        // the flaw this pins: the loop used to rewind and retry a failing record for ever, so a
+        // collections database that came back half an hour later purged the collections of an
+        // account the saga had long since compensated and handed back to its owner — with no
+        // signal to him or to an operator. The budget ends the retrying while the saga still cares.
+        long droppedBefore = PurgeCommandsConsumer.recordsDropped();
+        store.add("alice@example.com", "favourites", new ItemRef("meme", "42"));
+        MockProducer<String, String> producer =
+                new MockProducer<>(true, new StringSerializer(), new StringSerializer());
+        MockConsumer<String, String> consumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST);
+        AtomicInteger failures = new AtomicInteger();
+        CollectionStore alwaysFailing = new DelegatingStore(store) {
+            @Override
+            public int purgeUser(String user) {
+                failures.incrementAndGet();
+                consumer.schedulePollTask(() -> consumer.addRecord(command(0, PURGE_ALICE)));
+                // the message carries the address on purpose: the drop line must not repeat it
+                throw new IllegalStateException(
+                        new java.sql.SQLException("purge of alice@example.com rolled back"));
+            }
+        };
+        prime(consumer, command(0, PURGE_ALICE));
+        // a budget in milliseconds instead of the production 90 seconds — the same code path
+        PurgeCommandsConsumer purge = new PurgeCommandsConsumer(new PurgeUserItems(alwaysFailing),
+                mapper, TEST_BACKOFF_MILLIS, Duration.ofMillis(60));
+
+        startLoop(purge, consumer, producer);
+        await("the abandoned record's offset to commit", () -> committedOffset(consumer) >= 1);
+
+        assertTrue(failures.get() >= 2,
+                "the budget must buy real retries, not just the first attempt");
+        assertEquals(droppedBefore + 1, PurgeCommandsConsumer.recordsDropped(),
+                "the drop must be COUNTED — collections_kafka_records_dropped_total is the only"
+                        + " signal an operator gets that a deletion was not finished here");
+        assertTrue(producer.history().isEmpty(),
+                "a purge that never happened must not be confirmed as done");
+        assertTrue(loopThread.isAlive(), "the loop goes on to the next record");
+        await("readiness to recover once the loop moves on", () -> purge.healthy(Duration.ofSeconds(1)));
+
+        ILoggingEvent drop = logLines.list.stream()
+                .filter(line -> line.getLevel() == Level.ERROR)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("the drop must be LOUD: an ERROR line"));
+        String logged = drop.getFormattedMessage();
+        assertTrue(logged.contains("DROPPED"), "the line must say what happened: " + logged);
+        assertTrue(logged.contains("IllegalStateException <- SQLException"),
+                "the line must carry the exception TYPE chain, which is what triages: " + logged);
+        assertFalse(logged.contains("alice@example.com"),
+                "and never an exception MESSAGE — it can carry the leaver's address: " + logged);
+        assertTrue(MetricsEndpoint.body()
+                        .contains("collections_kafka_records_dropped_total{topic=\""
+                                + PurgeCommandsConsumer.COMMANDS_TOPIC + "\"} "),
+                "/metrics must expose the counter, or nobody can alert on it");
+    }
+
+    @Test
+    void a_commit_that_keeps_failing_retries_without_end_and_drops_nothing() throws Exception {
+        // the other half of the fix: the budget bounds the handling of a RECORD. A failure with no
+        // consumed record behind it — a commit, a poll, the broker probe — keeps retrying for ever,
+        // because there is no purge in flight whose lateness could hurt anybody.
+        long droppedBefore = PurgeCommandsConsumer.recordsDropped();
+        store.add("alice@example.com", "favourites", new ItemRef("meme", "42"));
+        MockProducer<String, String> producer =
+                new MockProducer<>(true, new StringSerializer(), new StringSerializer());
+        AtomicInteger commits = new AtomicInteger();
+        MockConsumer<String, String> consumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST) {
+            @Override
+            public synchronized void commitSync() {
+                commits.incrementAndGet();
+                schedulePollTask(() -> addRecord(command(0, PURGE_ALICE)));
+                throw new org.apache.kafka.common.errors.TimeoutException("commit went nowhere");
+            }
+        };
+        prime(consumer, command(0, PURGE_ALICE));
+        PurgeCommandsConsumer purge = new PurgeCommandsConsumer(new PurgeUserItems(store), mapper,
+                TEST_BACKOFF_MILLIS, Duration.ofMillis(20));
+
+        startLoop(purge, consumer, producer);
+        await("several failed commits, well past the tiny budget", () -> commits.get() >= 5);
+
+        assertEquals(droppedBefore, PurgeCommandsConsumer.recordsDropped(),
+                "a commit failure must never drop a record, however long it lasts");
+        assertTrue(loopThread.isAlive(), "and must not end the loop either");
     }
 
     @Test

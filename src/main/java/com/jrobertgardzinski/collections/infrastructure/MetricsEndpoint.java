@@ -19,13 +19,29 @@ final class MetricsEndpoint {
     }
 
     static void handle(ServerRequest req, ServerResponse res) {
+        res.send(body());
+    }
+
+    /**
+     * The exposition text, as a plain function so a test can read it without a running WebServer.
+     *
+     * <p>{@code collections_kafka_records_dropped_total} is the one line an operator alerts on: the
+     * sibling of comments' {@code comments_kafka_records_dropped_total}, incremented once per saga
+     * record this instance abandoned after its retry budget (see
+     * {@link PurgeCommandsConsumer#RETRY_BUDGET}). One increment means one account deletion this
+     * service did not finish — the saga is about to compensate, and nobody else will say so.
+     */
+    static String body() {
         Runtime rt = Runtime.getRuntime();
-        String body = "# TYPE collections_jvm_memory_used_bytes gauge\n"
+        return "# TYPE collections_jvm_memory_used_bytes gauge\n"
                 + "collections_jvm_memory_used_bytes " + (rt.totalMemory() - rt.freeMemory()) + "\n"
                 + "# TYPE collections_jvm_threads gauge\n"
                 + "collections_jvm_threads " + ManagementFactory.getThreadMXBean().getThreadCount() + "\n"
                 + "# TYPE collections_uptime_seconds gauge\n"
-                + "collections_uptime_seconds " + (System.currentTimeMillis() - STARTED) / 1000 + "\n";
-        res.send(body);
+                + "collections_uptime_seconds " + (System.currentTimeMillis() - STARTED) / 1000 + "\n"
+                + "# TYPE collections_kafka_records_dropped_total counter\n"
+                + "collections_kafka_records_dropped_total{topic=\""
+                + PurgeCommandsConsumer.COMMANDS_TOPIC + "\"} "
+                + PurgeCommandsConsumer.recordsDropped() + "\n";
     }
 }

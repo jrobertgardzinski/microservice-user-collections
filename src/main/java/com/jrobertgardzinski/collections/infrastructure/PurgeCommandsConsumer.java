@@ -25,6 +25,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * This service's side of the account-deletion saga. It consumes {@code content-commands} (the
@@ -34,12 +36,18 @@ import java.util.Set;
  * header, in and out, so the async hop keeps the trace of the request that started the deletion.
  *
  * <p><b>No dead-letter queue — on purpose.</b> Malformed commands (not JSON, no e-mail) are
- * dropped and committed, because no retry can fix them. But a well-formed command whose handling
- * keeps failing (a poison pill: say, a payload that reliably crashes the store) is retried with
- * backoff forever — there is no DLQ to park it on, so it blocks its partition until a human or a
- * fix intervenes. That is the accepted cost of the at-least-once contract here: the saga must not
- * lose a purge, and the eternal retry is not silent — the cycle marker stops advancing and
- * {@code /health} (readiness) turns 503, which is exactly the alarm an operator sees. Liveness
+ * dropped and committed, because no retry can fix them. A well-formed command whose handling keeps
+ * failing (the store away, a poison pill payload) is retried with backoff — but only for as long as
+ * {@link #RETRY_BUDGET}, after which THAT record is abandoned: its offset is committed, the drop is
+ * logged as an ERROR and counted in {@code collections_kafka_records_dropped_total}. There is no DLQ
+ * to park it on, so an abandoned purge is the saga's problem again — which is exactly right, because
+ * the orchestrator's patience is finite (see {@link #RETRY_BUDGET}) and a purge that lands after the
+ * saga compensated erases the collections of an account the leaver has been told he still owns.
+ * Unbounded retrying survives only where NOTHING was consumed — a broker that will not answer the
+ * probe, a poll or a commit that fails — because there no record's clock is running.
+ *
+ * <p>The retrying is not silent either: while it lasts the cycle marker stops advancing and
+ * {@code /health} (readiness) turns 503, which is the alarm an operator sees. Liveness
  * ({@code /alive}) stays green through it: the loop is scheduling fine, it is the work that fails.
  */
 public class PurgeCommandsConsumer {
@@ -50,6 +58,30 @@ public class PurgeCommandsConsumer {
 
     /** The longest the loop legitimately pauses between iterations: the retry backoff's cap. */
     static final Duration MAX_BACKOFF = Duration.ofSeconds(30);
+
+    /**
+     * How long ONE record may be retried before it is abandoned — a wall-clock deadline, not a count
+     * of attempts. Ported from microservice-comments' {@code SagaRetryBudget}, whose javadoc argues
+     * the arithmetic in full and which names this service as the participant that could not simply
+     * copy the eternal retry. The reason is the orchestrator's finite patience:
+     *
+     * <ul>
+     *   <li>{@code OFFBOARDING_PURGE_TIMEOUT_SEC} = 120s — a saga unconfirmed that long is overdue;</li>
+     *   <li>the sweeper wakes every 15s and re-commands while retries remain (3), so the re-commands
+     *       land at ≈120s, ≈135s and ≈150s;</li>
+     *   <li>at ≈165s the retries are spent: the saga compensates, microservice-security hands the
+     *       account back and mails the leaver that the deletion FAILED.</li>
+     * </ul>
+     *
+     * <p>A participant that retried without end would purge whenever its store came back — half an
+     * hour later, a day later — erasing the collections of an account the saga has already restored
+     * to its owner, with no signal to him or to an operator. So the retrying is bounded, and 90s is
+     * the same bound the other two participants carry, so that all three share one budget: long
+     * enough for a real second attempt (a blocked Postgres call can spend a whole 30s connection
+     * timeout before it even throws) and short enough to end before the sweeper's first re-command at
+     * ≈120s, which is the moment this record stops being the one in charge of that purge.
+     */
+    static final Duration RETRY_BUDGET = Duration.ofSeconds(90);
 
     /**
      * The producer's delivery clocks, set EXPLICITLY because /alive depends on them (the same
@@ -131,9 +163,21 @@ public class PurgeCommandsConsumer {
 
     private static final Logger LOG = LoggerFactory.getLogger(PurgeCommandsConsumer.class);
 
+    /**
+     * How many records this process abandoned after their {@link #RETRY_BUDGET} — the counter behind
+     * {@code collections_kafka_records_dropped_total} in {@link MetricsEndpoint}, the sibling of
+     * comments' {@code comments_kafka_records_dropped_total}. One increment means one account
+     * deletion this service did not finish, and the saga is about to compensate: without it the
+     * bounded retry would trade a silent late purge for a silent lost one, which is no better. Static
+     * because the exporter is a plain function of the process (no registry in this service) and a
+     * Prometheus counter is per process anyway.
+     */
+    private static final AtomicLong RECORDS_DROPPED = new AtomicLong();
+
     private final PurgeUserItems purgeUserItems;
     private final ObjectMapper mapper;
     private final long initialBackoffMillis;
+    private final Duration retryBudget;
 
     // the readiness marker /health watches: refreshed on every completed poll-handle-commit cycle
     // (and when the loop starts, so a service still warming up is not born unhealthy).
@@ -155,16 +199,32 @@ public class PurgeCommandsConsumer {
     /** Test seam: the loop-under-test shortens the retry backoff instead of sleeping seconds. */
     PurgeCommandsConsumer(PurgeUserItems purgeUserItems, ObjectMapper mapper,
                           long initialBackoffMillis) {
+        this(purgeUserItems, mapper, initialBackoffMillis, RETRY_BUDGET);
+    }
+
+    /**
+     * Test seam: the loop-under-test also shortens the per-record budget, so the drop can be observed
+     * in milliseconds instead of sitting out 90 real seconds.
+     */
+    PurgeCommandsConsumer(PurgeUserItems purgeUserItems, ObjectMapper mapper,
+                          long initialBackoffMillis, Duration retryBudget) {
         this.purgeUserItems = purgeUserItems;
         this.mapper = mapper;
         this.initialBackoffMillis = initialBackoffMillis;
+        this.retryBudget = retryBudget;
+    }
+
+    /** The process-wide count of records abandoned after their budget; read by
+     *  {@link MetricsEndpoint}. */
+    static long recordsDropped() {
+        return RECORDS_DROPPED.get();
     }
 
     /**
      * READINESS, behind /health: true while the loop keeps COMPLETING cycles within the stall
      * tolerance. Cycles stop completing when a dependency is broken — database down, broker
-     * unreachable, a poison pill in eternal retry — so /health turning 503 means "this instance
-     * cannot currently do its saga share", whether or not the thread itself is fine. "Broker
+     * unreachable, a record being retried inside its budget — so /health turning 503 means "this
+     * instance cannot currently do its saga share", whether or not the thread itself is fine. "Broker
      * unreachable" is honest even on a QUIET topic: empty polls return normally against a dead
      * broker, so the loop backs its cycles with a periodic round-trip probe (see
      * {@link #PROBE_EVERY}) — a broker that stops answering fails the probing cycle
@@ -263,6 +323,13 @@ public class PurgeCommandsConsumer {
      * cleared — restored here) both exit cleanly instead of being swallowed by the retry catch.
      * Malformed commands, by contrast, are dropped inside {@link #handle} and their offset
      * committed: no retry can ever fix them.
+     *
+     * <p>The retrying of a RECORD is bounded by {@link #RETRY_BUDGET} — a record still failing when
+     * its deadline passes is committed and abandoned (see {@link #dropAfterBudget}), because a purge
+     * that lands after the saga compensated erases the content of an account the leaver was told he
+     * kept. Failures with no record behind them — the silent broker above, a poll or the batch's
+     * {@code commitSync()} — keep retrying without end: nothing was consumed, so no record's clock is
+     * running and there is nothing to lose by waiting.
      */
     public void run(String bootstrapServers) {
         try (KafkaConsumer<String, String> consumer = new KafkaConsumer<>(consumerProps(bootstrapServers));
@@ -285,6 +352,7 @@ public class PurgeCommandsConsumer {
         lastCycleNanos = System.nanoTime();   // readiness counts from the loop's start
         long backoffMillis = initialBackoffMillis;
         boolean rewindNeeded = false;
+        RecordBudget recordBudget = new RecordBudget(retryBudget);
         // the first iteration probes at once — a broker that is already gone must not need a
         // cadence's grace before /health says so. Nanotime DIFFERENCES only, never absolutes
         long nextProbeNanos = System.nanoTime();
@@ -309,9 +377,22 @@ public class PurgeCommandsConsumer {
                 }
                 ConsumerRecords<String, String> records = consumer.poll(POLL_EVERY);
                 for (ConsumerRecord<String, String> record : records) {
-                    handleRecord(record, producer);
+                    try {
+                        handleRecord(record, producer);
+                    } catch (InterruptException | InterruptedException stopping) {
+                        throw stopping;   // a stop request is not a handling failure
+                    } catch (Exception handlingFailed) {
+                        if (!recordBudget.isSpentOn(record)) {
+                            // still inside this record's budget: fail the cycle so the batch is
+                            // rewound and redelivered, exactly as before
+                            throw handlingFailed;
+                        }
+                        dropAfterBudget(record, handlingFailed, consumer);
+                        recordBudget.forget();
+                    }
                 }
                 consumer.commitSync();
+                recordBudget.forget();   // the batch is done; no record is being retried any more
                 lastCycleNanos = System.nanoTime();
                 backoffMillis = initialBackoffMillis;   // a full cycle worked: forgive the past
             } catch (InterruptException stopping) {
@@ -394,6 +475,100 @@ public class PurgeCommandsConsumer {
         return Math.min(backoffMillis * 2, MAX_BACKOFF_MILLIS);
     }
 
+    /**
+     * The deadline of the ONE record currently being retried. A record is identified by its
+     * coordinates, so the deadline survives the rewind: the same offset coming back from the broker
+     * continues the clock that its first failure started, instead of being handed a fresh budget on
+     * every redelivery (which is how a bounded budget turns back into an unbounded one).
+     *
+     * <p>{@code System.nanoTime}, never the wall clock: this measures elapsed time, and a wall clock
+     * can step (NTP). Backwards it would hand out a budget that never expires; forwards it would cut a
+     * purge short in the middle of the outage the budget exists for.
+     */
+    private static final class RecordBudget {
+
+        private final Duration budget;
+        private String retrying;
+        private long deadlineNanos;
+
+        RecordBudget(Duration budget) {
+            this.budget = budget;
+        }
+
+        /**
+         * True once this record has been failing for longer than the budget. The FIRST failure only
+         * opens the deadline (it returns false), so a record's life here is the budget plus that first
+         * attempt — the same shape as comments' {@code SagaRetryBudget.start()}.
+         */
+        boolean isSpentOn(ConsumerRecord<?, ?> record) {
+            String at = record.topic() + "-" + record.partition() + "@" + record.offset();
+            if (!at.equals(retrying)) {
+                retrying = at;
+                deadlineNanos = System.nanoTime() + budget.toNanos();
+                return false;
+            }
+            return System.nanoTime() - deadlineNanos >= 0;
+        }
+
+        /** No record is being retried any more: the next failure opens a fresh budget. */
+        void forget() {
+            retrying = null;
+        }
+    }
+
+    /**
+     * The budget is spent: abandon this ONE record — loudly, counted, and with its offset committed
+     * straight away so a later rewind in the same batch cannot bring it back. The rest of the batch
+     * still gets its chance, and the cycle can complete, which is what lets readiness recover.
+     *
+     * <p>Only exception TYPES are logged at ERROR, never messages: a store failure's message can
+     * carry the statement, and the statement carries the leaver's address — the same PII rule
+     * {@link #handle} follows. The type chain is what an operator triages on anyway ("connection
+     * refused" versus "rolled back" is a class, not a sentence), the coordinates say which record, and
+     * the throwable itself is one DEBUG line away.
+     *
+     * <p>If the targeted commit itself fails the exception leaves through the loop's generic catch —
+     * a commit failure is one of the two cases that still retry without end — and the record will be
+     * dropped again later, counting twice. Over-counting a drop is the harmless direction.
+     */
+    private void dropAfterBudget(ConsumerRecord<String, String> record, Exception failure,
+                                 Consumer<String, String> consumer) {
+        RECORDS_DROPPED.incrementAndGet();
+        String cid = header(record, CID_HEADER);
+        if (cid != null) {
+            MDC.put("cid", cid);   // the drop line belongs to the trace of the deletion request
+        }
+        try {
+            LOG.error("giving up on {}-{}@{} after the {}s retry budget: the record is DROPPED and"
+                            + " its offset committed ({}). If this was a purge command, this"
+                            + " service did NOT erase that account's collections and the saga will"
+                            + " compensate — it must never land after that",
+                    record.topic(), record.partition(), record.offset(),
+                    retryBudget.toSeconds(), typeChain(failure));
+            LOG.debug("the failure that exhausted the budget for {}-{}@{}", record.topic(),
+                    record.partition(), record.offset(), failure);
+        } finally {
+            MDC.remove("cid");
+        }
+        consumer.commitSync(Map.of(new TopicPartition(record.topic(), record.partition()),
+                new OffsetAndMetadata(record.offset() + 1)));
+    }
+
+    /** The exception types, outermost first — see {@link #dropAfterBudget} on why not the messages. */
+    private static String typeChain(Throwable failure) {
+        StringBuilder chain = new StringBuilder();
+        Throwable current = failure;
+        while (current != null && chain.length() < 200) {
+            if (!chain.isEmpty()) {
+                chain.append(" <- ");
+            }
+            chain.append(current.getClass().getSimpleName());
+            Throwable cause = current.getCause();
+            current = cause == current ? null : cause;   // a self-referencing cause is not a loop here
+        }
+        return chain.toString();
+    }
+
     /** Purge one command and, if it was ours, publish the confirmation before returning. */
     private void handleRecord(ConsumerRecord<String, String> record,
                               Producer<String, String> producer) throws Exception {
@@ -405,7 +580,7 @@ public class PurgeCommandsConsumer {
             Optional<String> confirmation = handle(record.value());
             if (confirmation.isPresent()) {
                 ProducerRecord<String, String> out =
-                        new ProducerRecord<>(EVENTS_TOPIC, record.key(), confirmation.get());
+                        new ProducerRecord<>(EVENTS_TOPIC, keyFor(confirmation.get()), confirmation.get());
                 if (cid != null) {
                     out.headers().add(CID_HEADER, cid.getBytes(StandardCharsets.UTF_8));
                 }
@@ -415,6 +590,38 @@ public class PurgeCommandsConsumer {
             }
         } finally {
             MDC.remove("cid");
+        }
+    }
+
+    /**
+     * The partition key of a confirmation — the SAGA, never the person.
+     *
+     * <p>This used to reuse the incoming command's key, and the orchestrator keys its commands by
+     * the leaver's address, so every confirmation carried that address in plain sight on
+     * {@code usercollections-events}: visible in any broker tool, in every consumer's log line about
+     * a key, and retained for as long as the topic is. The sibling service refuses to do that and
+     * says why in its own javadoc — this participant simply never got the same treatment (P18 poz. 38).
+     *
+     * <p>The saga id is the natural key: it names the case, it is stable across redeliveries (which
+     * is the only property a key must have here, since a confirmation is idempotent and the router
+     * reads every partition), and it carries no personal data. A command without one — tolerated
+     * only for older producers — falls back to an id DERIVED from the address, the same
+     * {@code nameUUIDFromBytes} idiom the orchestrator uses for its re-published outcomes: never
+     * blank, and never the address itself.
+     */
+    private String keyFor(String confirmationPayload) {
+        try {
+            com.fasterxml.jackson.databind.JsonNode confirmation = mapper.readTree(confirmationPayload);
+            String sagaId = confirmation.path("sagaId").asText(null);
+            if (sagaId != null && !sagaId.isBlank()) {
+                return sagaId;
+            }
+            String email = confirmation.path("email").asText("");
+            return UUID.nameUUIDFromBytes(email.getBytes(StandardCharsets.UTF_8)).toString();
+        } catch (Exception unparseable) {
+            // we built this payload a moment ago, so this cannot happen — but a key must exist, and
+            // a random one still beats putting the address on the wire
+            return UUID.randomUUID().toString();
         }
     }
 

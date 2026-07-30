@@ -36,13 +36,24 @@ const COLLECTIONS = deployed('collectionsUrl') ?? import.meta.env.VITE_COLLECTIO
 // come back "could not check", which is safe but useless.
 const MEMES = deployed('memesUrl') ?? import.meta.env.VITE_MEMES_URL ?? '';
 
+// Ends the session server-side. "Sign out" used to be `setToken(null)` alone (P12 W1 named this
+// very file), so security's rotating HttpOnly refresh cookie stayed valid for ~a day — on a shared
+// computer one `POST /refresh` handed the next person the previous user's session. The cookie
+// rides along on credentials:'include'; `keepalive` lets the request outlive the click; a network
+// error is swallowed, because signing out locally must never hang on the server. Without the
+// cookie it is an idempotent no-op.
+const logout = (): void => {
+  void fetch(`${SECURITY}/logout`, { method: 'POST', credentials: 'include', keepalive: true })
+    .catch(() => { /* the local sign-out proceeds regardless */ });
+};
+
 type Ref = { itemType: string; itemId: string };
 
 export function App() {
   const [token, setToken] = useState<string | null>(null);
   const [who, setWho] = useState('');
   return token
-    ? <Favourites token={token} who={who} signOut={() => setToken(null)} />
+    ? <Favourites token={token} who={who} signOut={() => { logout(); setToken(null); }} />
     : <SignIn onSignedIn={(t, email) => { setToken(t); setWho(email); }} />;
 }
 

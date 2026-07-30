@@ -23,7 +23,7 @@ import java.time.Duration;
  *
  * <p>Two probes, two questions. {@code /health} is READINESS: 503 once the consumer stops
  * completing cycles for longer than {@code COLLECTIONS_CONSUMER_STALL_SEC} (default 60) — a broken
- * dependency (database down, broker away, a poison pill in eternal retry) shows here, because a
+ * dependency (database down, broker away, a record retried inside its budget) shows here, because a
  * cycle only completes when the whole poll-handle-confirm-commit chain works, and because at most
  * once per {@link PurgeCommandsConsumer#PROBE_EVERY} the loop demands a real answer from the
  * broker (empty polls return normally against a dead one, so a quiet topic alone proves nothing).
@@ -43,7 +43,8 @@ import java.time.Duration;
  * is an orchestrator's job (k3s, Swarm) acting on the same signal.
  *
  * <p><b>Two Kafka threads, two different promises.</b> {@link PurgeCommandsConsumer} is the saga
- * participant described above — orchestrated, confirmed, retried forever, watched by both probes.
+ * participant described above — orchestrated, confirmed, retried within a bounded budget (see
+ * {@link PurgeCommandsConsumer#RETRY_BUDGET}), watched by both probes.
  * {@link CascadeConsumer} is the deletion cascade — choreographed, unconfirmed, best-effort, in
  * its own consumer group and watched by NEITHER probe. The split is deliberate and argued in
  * {@link CascadeConsumer}'s javadoc; the short version is that a stalled cleanup must never be
