@@ -97,7 +97,7 @@ class PurgeCommandsConsumerLoopTest {
     void a_processed_record_is_confirmed_before_its_offset_commits() throws Exception {
         store.add("alice@example.com", "favourites", new ItemRef("meme", "42"));
         MockProducer<String, String> producer =
-                new MockProducer<>(true, new StringSerializer(), new StringSerializer());
+                new MockProducer<>(true, null, new StringSerializer(), new StringSerializer());
         // capture, at the exact commit that covers the record, how many confirmations the
         // producer had already accepted — the at-least-once ordering made observable
         AtomicInteger confirmationsWhenOffsetCommitted = new AtomicInteger(-1);
@@ -142,7 +142,7 @@ class PurgeCommandsConsumerLoopTest {
     void the_confirmation_is_keyed_by_the_saga_never_by_the_leavers_address() throws Exception {
         store.add("alice@example.com", "favourites", new ItemRef("meme", "42"));
         MockProducer<String, String> producer =
-                new MockProducer<>(true, new StringSerializer(), new StringSerializer());
+                new MockProducer<>(true, null, new StringSerializer(), new StringSerializer());
         MockConsumer<String, String> consumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST);
         // the incoming command IS keyed by the address (that is what the orchestrator sends)
         prime(consumer, command(0, PURGE_ALICE));
@@ -165,7 +165,7 @@ class PurgeCommandsConsumerLoopTest {
         long droppedBefore = PurgeCommandsConsumer.recordsDropped();
         store.add("alice@example.com", "favourites", new ItemRef("meme", "42"));
         MockProducer<String, String> producer =
-                new MockProducer<>(true, new StringSerializer(), new StringSerializer());
+                new MockProducer<>(true, null, new StringSerializer(), new StringSerializer());
         MockConsumer<String, String> consumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST);
         AtomicLong committedWhenStoreFailed = new AtomicLong(Long.MIN_VALUE);
         AtomicInteger failuresLeft = new AtomicInteger(1);
@@ -205,7 +205,7 @@ class PurgeCommandsConsumerLoopTest {
         // autoComplete=false: send().get() blocks forever — the exact spot where the raw
         // InterruptedException used to be eaten by the generic retry catch
         MockProducer<String, String> producer =
-                new MockProducer<>(false, new StringSerializer(), new StringSerializer());
+                new MockProducer<>(false, null, new StringSerializer(), new StringSerializer());
         MockConsumer<String, String> consumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST);
         prime(consumer, command(0, PURGE_ALICE));
 
@@ -223,7 +223,7 @@ class PurgeCommandsConsumerLoopTest {
     @Test
     void an_empty_email_is_dropped_without_confirmation_but_with_commit() throws Exception {
         MockProducer<String, String> producer =
-                new MockProducer<>(true, new StringSerializer(), new StringSerializer());
+                new MockProducer<>(true, null, new StringSerializer(), new StringSerializer());
         MockConsumer<String, String> consumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST);
         prime(consumer, command(0,
                 "{\"type\":\"PURGE_USER_CONTENT\",\"email\":\"\",\"sagaId\":\"s-9\"}"));
@@ -240,7 +240,7 @@ class PurgeCommandsConsumerLoopTest {
     void a_permanently_failing_store_keeps_alive_green_while_health_stalls() throws Exception {
         store.add("alice@example.com", "favourites", new ItemRef("meme", "42"));
         MockProducer<String, String> producer =
-                new MockProducer<>(true, new StringSerializer(), new StringSerializer());
+                new MockProducer<>(true, null, new StringSerializer(), new StringSerializer());
         MockConsumer<String, String> consumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST);
         AtomicInteger failures = new AtomicInteger();
         // the poison-pill shape: every retry finds the database just as broken as the last one.
@@ -281,7 +281,7 @@ class PurgeCommandsConsumerLoopTest {
         long droppedBefore = PurgeCommandsConsumer.recordsDropped();
         store.add("alice@example.com", "favourites", new ItemRef("meme", "42"));
         MockProducer<String, String> producer =
-                new MockProducer<>(true, new StringSerializer(), new StringSerializer());
+                new MockProducer<>(true, null, new StringSerializer(), new StringSerializer());
         MockConsumer<String, String> consumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST);
         AtomicInteger failures = new AtomicInteger();
         ItemErasure alwaysFailing = new DelegatingErasure(store) {
@@ -336,7 +336,7 @@ class PurgeCommandsConsumerLoopTest {
         long droppedBefore = PurgeCommandsConsumer.recordsDropped();
         store.add("alice@example.com", "favourites", new ItemRef("meme", "42"));
         MockProducer<String, String> producer =
-                new MockProducer<>(true, new StringSerializer(), new StringSerializer());
+                new MockProducer<>(true, null, new StringSerializer(), new StringSerializer());
         AtomicInteger commits = new AtomicInteger();
         MockConsumer<String, String> consumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST) {
             @Override
@@ -362,7 +362,7 @@ class PurgeCommandsConsumerLoopTest {
     void a_dead_broker_on_a_quiet_topic_fails_the_probe_and_stalls_health_not_alive()
             throws Exception {
         MockProducer<String, String> producer =
-                new MockProducer<>(true, new StringSerializer(), new StringSerializer());
+                new MockProducer<>(true, null, new StringSerializer(), new StringSerializer());
         java.util.concurrent.atomic.AtomicBoolean brokerAnswers =
                 new java.util.concurrent.atomic.AtomicBoolean(false);
         AtomicInteger failedProbes = new AtomicInteger();
@@ -409,7 +409,7 @@ class PurgeCommandsConsumerLoopTest {
         // the assignment, one wait of up to default.api.timeout.ms per partition, for a batch
         // that was never consumed. Nothing was polled here, so nothing may be sought back.
         MockProducer<String, String> producer =
-                new MockProducer<>(true, new StringSerializer(), new StringSerializer());
+                new MockProducer<>(true, null, new StringSerializer(), new StringSerializer());
         AtomicInteger failedProbes = new AtomicInteger();
         AtomicInteger seeks = new AtomicInteger();
         AtomicInteger committedLookups = new AtomicInteger();
@@ -463,7 +463,7 @@ class PurgeCommandsConsumerLoopTest {
         // metadata round trip several times a second — the javadoc's promise that the probe
         // only costs anything on a quiet topic was simply untrue
         MockProducer<String, String> producer =
-                new MockProducer<>(true, new StringSerializer(), new StringSerializer());
+                new MockProducer<>(true, null, new StringSerializer(), new StringSerializer());
         AtomicInteger probes = new AtomicInteger();
         AtomicInteger cycles = new AtomicInteger();
         java.util.Set<String> probedTopics = java.util.concurrent.ConcurrentHashMap.newKeySet();
@@ -499,7 +499,7 @@ class PurgeCommandsConsumerLoopTest {
     @Test
     void a_finished_thread_lets_the_alive_marker_stall() throws Exception {
         MockProducer<String, String> producer =
-                new MockProducer<>(true, new StringSerializer(), new StringSerializer());
+                new MockProducer<>(true, null, new StringSerializer(), new StringSerializer());
         MockConsumer<String, String> consumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST);
         prime(consumer, command(0, PURGE_ALICE));
         PurgeCommandsConsumer purge = consumerUnderTest(store);
