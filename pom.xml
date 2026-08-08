@@ -27,7 +27,7 @@
              microservice-offboarding stoi na 7.20.1 z junit-suite 6.1.2 i jest zielony, więc
              kombinacja jest zgodna z resztą estate'u. Do zrobienia osobno, nie przy okazji
              dziesięciu innych bumpów. -->
-        <cucumber.version>7.20.1</cucumber.version>
+        <cucumber.version>7.34.6</cucumber.version>
         <junit-suite.version>6.1.2</junit-suite.version>
         <allure.version>2.29.0</allure.version>
     </properties>
