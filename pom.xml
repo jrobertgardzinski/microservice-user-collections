@@ -20,20 +20,26 @@
 
     <properties>
         <mainClass>com.jrobertgardzinski.collections.infrastructure.Main</mainClass>
-        <!-- NIE 7.34.x (Dependabot #6, świadomie odrzucone 2026-08-08): od 7.3x cucumber stoi na
-             JUnit Platform 6 i harness tego modułu przestaje się uruchamiać — silnik odpowiada
-             „TestEngine with ID 'cucumber' failed to discover tests" bez śladu stosu, i nie
-             naprawia tego ani junit-platform-suite 6.1.2, ani surefire 3.5.6. Bliźniaczy
-             microservice-offboarding stoi na 7.20.1 z junit-suite 6.1.2 i jest zielony, więc
-             kombinacja jest zgodna z resztą estate'u. Do zrobienia osobno, nie przy okazji
-             dziesięciu innych bumpów. -->
-        <cucumber.version>7.20.1</cucumber.version>
+        <cucumber.version>7.34.6</cucumber.version>
         <junit-suite.version>6.1.2</junit-suite.version>
-        <allure.version>2.29.0</allure.version>
+        <allure.version>2.35.4</allure.version>
     </properties>
 
     <dependencyManagement>
         <dependencies>
+            <!-- FIRST in dependencyManagement, and that order is the point: the Helidon parent
+                 pins the JUnit Platform at 1.12.2, while cucumber 7.34 is built against JUnit BOM
+                 5.14.2 (platform 1.14.x) and its engine simply fails to discover anything on the
+                 older one — reporting "TestEngine with ID 'cucumber' failed to discover tests"
+                 with no stack trace at all. The version is cucumber's own declared target, read
+                 from its pom, not guessed. -->
+            <dependency>
+                <groupId>org.junit</groupId>
+                <artifactId>junit-bom</artifactId>
+                <version>5.14.2</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
             <dependency>
                 <groupId>io.qameta.allure</groupId>
                 <artifactId>allure-bom</artifactId>
