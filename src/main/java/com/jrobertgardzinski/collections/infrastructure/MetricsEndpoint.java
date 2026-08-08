@@ -42,6 +42,10 @@ final class MetricsEndpoint {
                 + "# TYPE collections_kafka_records_dropped_total counter\n"
                 + "collections_kafka_records_dropped_total{topic=\""
                 + PurgeCommandsConsumer.COMMANDS_TOPIC + "\"} "
-                + PurgeCommandsConsumer.recordsDropped() + "\n";
+                + PurgeCommandsConsumer.recordsDropped() + "\n"
+                // the GDPR line: rows this service is hiding but has not been told to erase. It
+                // must fall back to zero on its own, so a gauge — see ErasureBacklogWatch
+                + "# TYPE collections_erasure_backlog gauge\n"
+                + "collections_erasure_backlog " + ErasureBacklogWatch.backlog() + "\n";
     }
 }

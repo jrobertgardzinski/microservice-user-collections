@@ -2,7 +2,9 @@ package com.jrobertgardzinski.collections.infrastructure;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jrobertgardzinski.collections.application.MarkUserItemsForErasure;
 import com.jrobertgardzinski.collections.application.PurgeUserItems;
+import com.jrobertgardzinski.collections.application.RestoreUserItems;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
@@ -174,6 +176,15 @@ public class PurgeCommandsConsumer {
      */
     private static final AtomicLong RECORDS_DROPPED = new AtomicLong();
 
+    /** The reversible mark; its confirmation is what the orchestrator's quorum counts. */
+    static final String MARK = "PURGE_USER_CONTENT";
+    /** The closure: the orchestrator says the case is settled, so the refs may finally go. */
+    static final String ERASE = "ERASE_USER_CONTENT";
+    /** The compensation: the marks come off and the leaver's lists are whole again. */
+    static final String RESTORE = "RESTORE_USER_CONTENT";
+
+    private final MarkUserItemsForErasure markForErasure;
+    private final RestoreUserItems restoreUserItems;
     private final PurgeUserItems purgeUserItems;
     private final ObjectMapper mapper;
     private final long initialBackoffMillis;
@@ -192,22 +203,30 @@ public class PurgeCommandsConsumer {
     // alive). Same monotonic clock and the same package-private test seam as above.
     volatile long lastScheduledNanos = System.nanoTime();
 
-    public PurgeCommandsConsumer(PurgeUserItems purgeUserItems, ObjectMapper mapper) {
-        this(purgeUserItems, mapper, DEFAULT_INITIAL_BACKOFF_MILLIS);
+    public PurgeCommandsConsumer(MarkUserItemsForErasure markForErasure,
+                                 RestoreUserItems restoreUserItems,
+                                 PurgeUserItems purgeUserItems, ObjectMapper mapper) {
+        this(markForErasure, restoreUserItems, purgeUserItems, mapper,
+                DEFAULT_INITIAL_BACKOFF_MILLIS);
     }
 
     /** Test seam: the loop-under-test shortens the retry backoff instead of sleeping seconds. */
-    PurgeCommandsConsumer(PurgeUserItems purgeUserItems, ObjectMapper mapper,
+    PurgeCommandsConsumer(MarkUserItemsForErasure markForErasure, RestoreUserItems restoreUserItems,
+                          PurgeUserItems purgeUserItems, ObjectMapper mapper,
                           long initialBackoffMillis) {
-        this(purgeUserItems, mapper, initialBackoffMillis, RETRY_BUDGET);
+        this(markForErasure, restoreUserItems, purgeUserItems, mapper, initialBackoffMillis,
+                RETRY_BUDGET);
     }
 
     /**
      * Test seam: the loop-under-test also shortens the per-record budget, so the drop can be observed
      * in milliseconds instead of sitting out 90 real seconds.
      */
-    PurgeCommandsConsumer(PurgeUserItems purgeUserItems, ObjectMapper mapper,
+    PurgeCommandsConsumer(MarkUserItemsForErasure markForErasure, RestoreUserItems restoreUserItems,
+                          PurgeUserItems purgeUserItems, ObjectMapper mapper,
                           long initialBackoffMillis, Duration retryBudget) {
+        this.markForErasure = markForErasure;
+        this.restoreUserItems = restoreUserItems;
         this.purgeUserItems = purgeUserItems;
         this.mapper = mapper;
         this.initialBackoffMillis = initialBackoffMillis;
@@ -256,9 +275,16 @@ public class PurgeCommandsConsumer {
     }
 
     /**
-     * Handle one command payload: purge the user and return the confirmation to publish, or empty
-     * for a command that is not ours (unknown type / malformed). Pure and broker-free, so the saga
-     * scenario can drive it directly.
+     * Handle one command payload and return the confirmation to publish, or empty when there is
+     * nothing to answer. Pure and broker-free, so the saga scenario can drive it directly.
+     *
+     * <p>THREE commands, because the saga has two phases (ADR 0007). {@link #MARK} is the
+     * reversible step — the leaver's refs are reserved, their lists look empty, nothing is deleted
+     * — and it is the ONLY one that confirms, because it is the only one the orchestrator is
+     * waiting on. {@link #ERASE} is the closure and the only command that destroys anything;
+     * {@link #RESTORE} is the compensation. Both of those END the case, so answering them would
+     * tell the orchestrator something it has already decided. All three are idempotent, which is
+     * what makes at-least-once delivery need no dedup here.
      */
     public Optional<String> handle(String commandPayload) {
         JsonNode command;
@@ -272,20 +298,34 @@ public class PurgeCommandsConsumer {
                     commandPayload == null ? 0 : commandPayload.length());
             return Optional.empty();
         }
-        if (!"PURGE_USER_CONTENT".equals(command.path("type").asText())) {
+        String type = command.path("type").asText();
+        if (!MARK.equals(type) && !ERASE.equals(type) && !RESTORE.equals(type)) {
             return Optional.empty();
         }
         String email = command.path("email").asText();
         String sagaId = command.path("sagaId").asText();
         if (email.isBlank()) {
-            // a purge with nobody to purge: retrying can't fix it, and confirming would tell the
+            // a command with nobody to act on: retrying can't fix it, and confirming would tell the
             // orchestrator a deletion happened that never did — so drop it without a confirmation
-            LOG.warn("dropping purge command without an email (saga {})", sagaId);
+            LOG.warn("dropping {} without an email (saga {})", type, sagaId);
             return Optional.empty();
         }
-        int removed = purgeUserItems.execute(email);
         // the saga id identifies the run in logs; the e-mail is PII and stays out of INFO lines
-        LOG.info("purged {} collection refs of one leaver (saga {})", removed, sagaId);
+        if (ERASE.equals(type)) {
+            // the CLOSURE. Only this destroys anything, and only what the mark reserved
+            LOG.info("erased {} reserved collection refs on the saga's closure (saga {})",
+                    purgeUserItems.execute(email), sagaId);
+            return Optional.empty();
+        }
+        if (RESTORE.equals(type)) {
+            // the COMPENSATION. Not confirmed either: both of these are the orchestrator ENDING
+            // the case, and answering would tell it something it has already decided
+            LOG.info("restored {} collection refs: the saga compensated (saga {})",
+                    restoreUserItems.execute(email), sagaId);
+            return Optional.empty();
+        }
+        LOG.info("marked {} collection refs of one leaver for erasure (saga {})",
+                markForErasure.execute(email), sagaId);
         try {
             var confirmation = mapper.createObjectNode()
                     .put("type", "USER_CONTENT_PURGED")

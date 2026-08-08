@@ -3,7 +3,9 @@ package com.jrobertgardzinski.collections.infrastructure;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jrobertgardzinski.collections.application.ListItems;
 import com.jrobertgardzinski.collections.application.PurgeDeletedItem;
+import com.jrobertgardzinski.collections.application.MarkUserItemsForErasure;
 import com.jrobertgardzinski.collections.application.PurgeUserItems;
+import com.jrobertgardzinski.collections.application.RestoreUserItems;
 import com.jrobertgardzinski.collections.application.RemoveItem;
 import com.jrobertgardzinski.collections.application.SaveItem;
 import io.helidon.webserver.WebServer;
@@ -11,6 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.sql.DataSource;
+import java.time.Clock;
 import java.time.Duration;
 
 /**
@@ -178,6 +181,9 @@ public final class Main {
         return seconds;
     }
 
+    /** How often the erasure backlog is counted. A minute, like the siblings' scheduled watch. */
+    private static final Duration BACKLOG_WATCH_INTERVAL = Duration.ofMinutes(1);
+
     public static void main(String[] args) {
         int port = Integer.parseInt(System.getenv().getOrDefault("COLLECTIONS_PORT", "8092"));
         String securityUrl = System.getenv().getOrDefault("SECURITY_URL", "http://localhost:8080");
@@ -186,6 +192,9 @@ public final class Main {
         // the concrete type, not the CollectionStore port: this one adapter answers BOTH ports —
         // the user axis the API and the saga use, and the item axis the cascade uses (V2's index)
         JdbcCollectionStore store = new JdbcCollectionStore(dataSource);
+        // the erasure-aware side of the same table, and the ONLY adapter here allowed to read a
+        // row the account-deletion saga has reserved (ADR 0007)
+        JdbcItemErasure erasure = new JdbcItemErasure(dataSource);
         SecurityGate gate = new JwtSecurityGate(securityUrl);
 
         CollectionsApi collections = new CollectionsApi(
@@ -197,10 +206,28 @@ public final class Main {
         String bootstrap = System.getenv().getOrDefault("KAFKA_BOOTSTRAP_SERVERS", "").trim();
         PurgeCommandsConsumer purgeConsumer = null;
         if (!bootstrap.isEmpty()) {
-            PurgeCommandsConsumer consumer =
-                    new PurgeCommandsConsumer(new PurgeUserItems(store), new ObjectMapper());
+            PurgeCommandsConsumer consumer = new PurgeCommandsConsumer(
+                    new MarkUserItemsForErasure(erasure, Clock.systemUTC()),
+                    new RestoreUserItems(erasure), new PurgeUserItems(erasure), new ObjectMapper());
             Thread.ofVirtual().name("purge-consumer").start(() -> consumer.run(bootstrap));
             purgeConsumer = consumer;
+
+            // the erasure backlog alarm: rows a lost closure command left hidden but not erased.
+            // It runs beside the saga consumer and only when there IS a broker — without one there
+            // is no saga, so there are no marks and nothing to watch (the same coupling the two
+            // Spring participants get for free from @EnableScheduling)
+            ErasureBacklogWatch backlogWatch = new ErasureBacklogWatch(erasure, Clock.systemUTC(),
+                    ErasureBacklogWatch.DEFAULT_STUCK_AFTER);
+            Thread.ofVirtual().name("erasure-backlog-watch").start(() -> {
+                while (!Thread.currentThread().isInterrupted()) {
+                    backlogWatch.check();
+                    try {
+                        Thread.sleep(BACKLOG_WATCH_INTERVAL);
+                    } catch (InterruptedException stopping) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
+            });
 
             // the deletion CASCADE, on a thread and a consumer group of its OWN (see
             // CascadeConsumer's javadoc for the full argument): choreographed, best-effort, no

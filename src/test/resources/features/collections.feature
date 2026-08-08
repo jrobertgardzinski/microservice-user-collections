@@ -49,16 +49,41 @@ Feature: A user's collections of saved references
     Then the collections stay closed to them
 
   @saga
-  Scenario: Deleting the account purges every collection
+  Scenario: Deleting the account empties every collection at once
     Given alice has saved meme 42 into "favourites"
     And alice has saved comment 7 into "watchlist"
     When alice's account is purged
-    Then 2 references were removed
+    Then 2 references were reserved
     And alice's "favourites" is empty
     And alice's "watchlist" is empty
     # The saga has two halves and only the refusal half was ever asserted: the suite proved that a
     # malformed command produces NO confirmation, never that a good one produces the right one.
     And a confirmation for that saga goes back to the orchestrator
+
+  @saga
+  Scenario: The saga fails at another participant, so the saved list comes back
+    Given alice has saved meme 42 into "favourites"
+    And alice has saved comment 7 into "watchlist"
+    And alice's account is purged
+    When the orchestrator compensates the saga
+    Then alice's "favourites" contains meme 42
+    And alice's "watchlist" contains comment 7
+    And no confirmation goes back to the orchestrator
+
+  @saga
+  Scenario: The saga closes, so the saved list is gone for good
+    Given alice has saved meme 42 into "favourites"
+    And alice's account is purged
+    When the orchestrator closes the saga
+    Then alice's "favourites" is empty
+    And a late compensation brings nothing back
+    And no confirmation goes back to the orchestrator
+
+  @saga
+  Scenario: A closure for a saga that reserved nothing destroys nothing
+    Given alice has saved meme 42 into "favourites"
+    When the orchestrator closes the saga
+    Then alice's "favourites" contains meme 42
 
   @saga
   Scenario: A purge naming nobody is ignored

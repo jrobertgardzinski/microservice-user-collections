@@ -2,7 +2,11 @@ package com.jrobertgardzinski.collections.infrastructure;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jrobertgardzinski.collections.application.CollectionStore;
+import com.jrobertgardzinski.collections.application.ItemErasure;
+import com.jrobertgardzinski.collections.application.MarkUserItemsForErasure;
 import com.jrobertgardzinski.collections.application.PurgeUserItems;
+import com.jrobertgardzinski.collections.application.RestoreUserItems;
+import com.jrobertgardzinski.collections.domain.SavedItem;
 import com.jrobertgardzinski.collections.domain.ItemRef;
 import org.junit.jupiter.api.Test;
 
@@ -26,15 +30,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class PurgeConsumerHealthTest {
 
-    private final CollectionStore store = new CollectionStore() {
-        public boolean add(String user, String collection, ItemRef item) { return true; }
-        public boolean remove(String user, String collection, ItemRef item) { return false; }
-        public List<ItemRef> list(String user, String collection) { return List.of(); }
-        public int purgeUser(String user) { return 0; }
+    /** A store that holds nothing: these tests are about the probes, not about the purge. */
+    private final ItemErasure erasure = new ItemErasure() {
+        public List<SavedItem> activeOf(String user) { return List.of(); }
+        public List<SavedItem> pendingOf(String user) { return List.of(); }
+        public void store(SavedItem state) { }
+        public int eraseMarked(String user) { return 0; }
+        public List<SavedItem> pendingSince(java.time.Instant cutoff) { return List.of(); }
     };
 
-    private final PurgeCommandsConsumer consumer =
-            new PurgeCommandsConsumer(new PurgeUserItems(store), new ObjectMapper());
+    private final PurgeCommandsConsumer consumer = new PurgeCommandsConsumer(
+            new MarkUserItemsForErasure(erasure, java.time.Clock.systemUTC()),
+            new RestoreUserItems(erasure), new PurgeUserItems(erasure), new ObjectMapper());
 
     @Test
     void a_fresh_consumer_is_healthy() {

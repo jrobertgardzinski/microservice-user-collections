@@ -21,6 +21,12 @@ import java.util.List;
  * <p>It serves {@link ItemReferences} too — the same table read along its OTHER axis (see V2's
  * index). One adapter for one table; the ports stay two because the questions, the indexes and the
  * guarantees are two.
+ *
+ * <p><strong>Reads come from {@code active_collection_items}, never from the table.</strong> That
+ * view is where {@code WHERE status = 'ACTIVE'} is written down once (V3), so a listing cannot
+ * return something a running account-deletion saga has reserved — and cannot forget to exclude it,
+ * because there is no condition here to forget. Writes name the table, as writes must; the erasure
+ * state itself belongs to {@link JdbcItemErasure}, the one adapter allowed to READ the table.
  */
 public class JdbcCollectionStore implements CollectionStore, ItemReferences {
 
@@ -43,6 +49,9 @@ public class JdbcCollectionStore implements CollectionStore, ItemReferences {
 
     @Override
     public boolean add(String user, String collection, ItemRef item) {
+        // INSERT names the table, not the view, and must: a view is not what a row is written to.
+        // The UNIQUE constraint underneath spans rows of BOTH statuses, so saving something a
+        // running saga has reserved is read as "already saved" rather than duplicated — see V3
         try (Connection c = dataSource.getConnection();
              PreparedStatement ps = c.prepareStatement(
                      "INSERT INTO collection_items (user_email, collection, item_type, item_id) "
@@ -81,8 +90,8 @@ public class JdbcCollectionStore implements CollectionStore, ItemReferences {
     public List<ItemRef> list(String user, String collection) {
         try (Connection c = dataSource.getConnection();
              PreparedStatement ps = c.prepareStatement(
-                     "SELECT item_type, item_id FROM collection_items WHERE user_email = ? "
-                             + "AND collection = ? ORDER BY id DESC")) {
+                     "SELECT item_type, item_id FROM active_collection_items "
+                             + "WHERE user_email = ? AND collection = ? ORDER BY id DESC")) {
             ps.setString(1, user);
             ps.setString(2, collection);
             try (ResultSet rs = ps.executeQuery()) {
@@ -94,18 +103,6 @@ public class JdbcCollectionStore implements CollectionStore, ItemReferences {
             }
         } catch (SQLException e) {
             throw new IllegalStateException("could not list items", e);
-        }
-    }
-
-    @Override
-    public int purgeUser(String user) {
-        try (Connection c = dataSource.getConnection();
-             PreparedStatement ps = c.prepareStatement(
-                     "DELETE FROM collection_items WHERE user_email = ?")) {
-            ps.setString(1, user);
-            return ps.executeUpdate();
-        } catch (SQLException e) {
-            throw new IllegalStateException("could not purge user", e);
         }
     }
 

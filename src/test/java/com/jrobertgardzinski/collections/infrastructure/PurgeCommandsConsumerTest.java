@@ -5,7 +5,9 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jrobertgardzinski.collections.application.MarkUserItemsForErasure;
 import com.jrobertgardzinski.collections.application.PurgeUserItems;
+import com.jrobertgardzinski.collections.application.RestoreUserItems;
 import com.jrobertgardzinski.collections.domain.ItemRef;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,8 +30,9 @@ class PurgeCommandsConsumerTest {
 
     private final ObjectMapper mapper = new ObjectMapper();
     private final InMemoryCollectionStore store = new InMemoryCollectionStore();
-    private final PurgeCommandsConsumer consumer =
-            new PurgeCommandsConsumer(new PurgeUserItems(store), mapper);
+    private final PurgeCommandsConsumer consumer = new PurgeCommandsConsumer(
+            new MarkUserItemsForErasure(store, java.time.Clock.systemUTC()),
+            new RestoreUserItems(store), new PurgeUserItems(store), mapper);
 
     private final ListAppender<ILoggingEvent> logLines = new ListAppender<>();
 

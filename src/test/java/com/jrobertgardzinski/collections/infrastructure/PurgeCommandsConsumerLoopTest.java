@@ -6,7 +6,11 @@ import ch.qos.logback.core.read.ListAppender;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jrobertgardzinski.collections.application.CollectionStore;
+import com.jrobertgardzinski.collections.application.ItemErasure;
+import com.jrobertgardzinski.collections.application.MarkUserItemsForErasure;
 import com.jrobertgardzinski.collections.application.PurgeUserItems;
+import com.jrobertgardzinski.collections.application.RestoreUserItems;
+import com.jrobertgardzinski.collections.domain.SavedItem;
 import com.jrobertgardzinski.collections.domain.ItemRef;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.MockConsumer;
@@ -23,6 +27,7 @@ import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -165,9 +170,9 @@ class PurgeCommandsConsumerLoopTest {
         AtomicLong committedWhenStoreFailed = new AtomicLong(Long.MIN_VALUE);
         AtomicInteger failuresLeft = new AtomicInteger(1);
         // the throwing decorator: the first purge finds the database away, every later one works
-        CollectionStore failingOnce = new DelegatingStore(store) {
+        ItemErasure failingOnce = new DelegatingErasure(store) {
             @Override
-            public int purgeUser(String user) {
+            public List<SavedItem> activeOf(String user) {
                 if (failuresLeft.getAndDecrement() > 0) {
                     committedWhenStoreFailed.set(committedOffset(consumer));
                     // MockConsumer.poll() cleared the batch; re-add it so the loop's rewind to
@@ -175,7 +180,7 @@ class PurgeCommandsConsumerLoopTest {
                     consumer.schedulePollTask(() -> consumer.addRecord(command(0, PURGE_ALICE)));
                     throw new IllegalStateException("database away");
                 }
-                return super.purgeUser(user);
+                return super.activeOf(user);
             }
         };
         prime(consumer, command(0, PURGE_ALICE));
@@ -241,9 +246,9 @@ class PurgeCommandsConsumerLoopTest {
         // the poison-pill shape: every retry finds the database just as broken as the last one.
         // The consumer under test keeps the PRODUCTION budget (90s), so this whole test plays out
         // while the record's deadline is still far away — the drop that follows it has its own test
-        CollectionStore alwaysFailing = new DelegatingStore(store) {
+        ItemErasure alwaysFailing = new DelegatingErasure(store) {
             @Override
-            public int purgeUser(String user) {
+            public List<SavedItem> activeOf(String user) {
                 failures.incrementAndGet();
                 consumer.schedulePollTask(() -> consumer.addRecord(command(0, PURGE_ALICE)));
                 throw new IllegalStateException("database permanently away");
@@ -279,9 +284,9 @@ class PurgeCommandsConsumerLoopTest {
                 new MockProducer<>(true, new StringSerializer(), new StringSerializer());
         MockConsumer<String, String> consumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST);
         AtomicInteger failures = new AtomicInteger();
-        CollectionStore alwaysFailing = new DelegatingStore(store) {
+        ItemErasure alwaysFailing = new DelegatingErasure(store) {
             @Override
-            public int purgeUser(String user) {
+            public List<SavedItem> activeOf(String user) {
                 failures.incrementAndGet();
                 consumer.schedulePollTask(() -> consumer.addRecord(command(0, PURGE_ALICE)));
                 // the message carries the address on purpose: the drop line must not repeat it
@@ -291,8 +296,8 @@ class PurgeCommandsConsumerLoopTest {
         };
         prime(consumer, command(0, PURGE_ALICE));
         // a budget in milliseconds instead of the production 90 seconds — the same code path
-        PurgeCommandsConsumer purge = new PurgeCommandsConsumer(new PurgeUserItems(alwaysFailing),
-                mapper, TEST_BACKOFF_MILLIS, Duration.ofMillis(60));
+        PurgeCommandsConsumer purge =
+                consumerUnderTest(alwaysFailing, TEST_BACKOFF_MILLIS, Duration.ofMillis(60));
 
         startLoop(purge, consumer, producer);
         await("the abandoned record's offset to commit", () -> committedOffset(consumer) >= 1);
@@ -342,8 +347,8 @@ class PurgeCommandsConsumerLoopTest {
             }
         };
         prime(consumer, command(0, PURGE_ALICE));
-        PurgeCommandsConsumer purge = new PurgeCommandsConsumer(new PurgeUserItems(store), mapper,
-                TEST_BACKOFF_MILLIS, Duration.ofMillis(20));
+        PurgeCommandsConsumer purge =
+                consumerUnderTest(store, TEST_BACKOFF_MILLIS, Duration.ofMillis(20));
 
         startLoop(purge, consumer, producer);
         await("several failed commits, well past the tiny budget", () -> commits.get() >= 5);
@@ -513,9 +518,21 @@ class PurgeCommandsConsumerLoopTest {
 
     // ---- the harness ----
 
-    private PurgeCommandsConsumer consumerUnderTest(CollectionStore backingStore) {
-        return new PurgeCommandsConsumer(new PurgeUserItems(backingStore), mapper,
-                TEST_BACKOFF_MILLIS);
+    private PurgeCommandsConsumer consumerUnderTest(ItemErasure erasure) {
+        return consumerUnderTest(erasure, TEST_BACKOFF_MILLIS, PurgeCommandsConsumer.RETRY_BUDGET);
+    }
+
+    /**
+     * The three use cases the participant now has. The records these tests replay are MARK
+     * commands, so the mark is the step a sabotaged store breaks — which is the point: the
+     * reversible step is the one the orchestrator is waiting on, so it is the one whose failure
+     * must survive a redelivery and end with the budget.
+     */
+    private PurgeCommandsConsumer consumerUnderTest(ItemErasure erasure, long backoffMillis,
+                                                    Duration budget) {
+        return new PurgeCommandsConsumer(new MarkUserItemsForErasure(erasure, Clock.systemUTC()),
+                new RestoreUserItems(erasure), new PurgeUserItems(erasure), mapper, backoffMillis,
+                budget);
     }
 
     private void startLoop(PurgeCommandsConsumer purge, MockConsumer<String, String> consumer,
@@ -560,32 +577,37 @@ class PurgeCommandsConsumerLoopTest {
         fail("timed out waiting for " + what);
     }
 
-    /** A CollectionStore that forwards everything; tests override the method they sabotage. */
-    private static class DelegatingStore implements CollectionStore {
-        private final CollectionStore delegate;
+    /** An ItemErasure that forwards everything; tests override the method they sabotage. */
+    private static class DelegatingErasure implements ItemErasure {
+        private final ItemErasure delegate;
 
-        DelegatingStore(CollectionStore delegate) {
+        DelegatingErasure(ItemErasure delegate) {
             this.delegate = delegate;
         }
 
         @Override
-        public boolean add(String user, String collection, ItemRef item) {
-            return delegate.add(user, collection, item);
+        public List<SavedItem> activeOf(String user) {
+            return delegate.activeOf(user);
         }
 
         @Override
-        public boolean remove(String user, String collection, ItemRef item) {
-            return delegate.remove(user, collection, item);
+        public List<SavedItem> pendingOf(String user) {
+            return delegate.pendingOf(user);
         }
 
         @Override
-        public List<ItemRef> list(String user, String collection) {
-            return delegate.list(user, collection);
+        public void store(SavedItem state) {
+            delegate.store(state);
         }
 
         @Override
-        public int purgeUser(String user) {
-            return delegate.purgeUser(user);
+        public int eraseMarked(String user) {
+            return delegate.eraseMarked(user);
+        }
+
+        @Override
+        public List<SavedItem> pendingSince(java.time.Instant cutoff) {
+            return delegate.pendingSince(cutoff);
         }
     }
 }

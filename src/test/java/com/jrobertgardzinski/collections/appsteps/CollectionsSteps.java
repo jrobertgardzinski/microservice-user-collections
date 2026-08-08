@@ -2,7 +2,9 @@ package com.jrobertgardzinski.collections.appsteps;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jrobertgardzinski.collections.application.ListItems;
+import com.jrobertgardzinski.collections.application.MarkUserItemsForErasure;
 import com.jrobertgardzinski.collections.application.PurgeUserItems;
+import com.jrobertgardzinski.collections.application.RestoreUserItems;
 import com.jrobertgardzinski.collections.application.RemoveItem;
 import com.jrobertgardzinski.collections.application.SaveItem;
 import com.jrobertgardzinski.collections.domain.ItemRef;
@@ -25,9 +27,12 @@ public class CollectionsSteps {
     private final SaveItem saveItem = new SaveItem(store);
     private final RemoveItem removeItem = new RemoveItem(store);
     private final ListItems listItems = new ListItems(store);
+    private final MarkUserItemsForErasure markForErasure =
+            new MarkUserItemsForErasure(store, java.time.Clock.systemUTC());
+    private final RestoreUserItems restoreUserItems = new RestoreUserItems(store);
     private final PurgeUserItems purgeUserItems = new PurgeUserItems(store);
-    private final PurgeCommandsConsumer purgeConsumer =
-            new PurgeCommandsConsumer(purgeUserItems, new ObjectMapper());
+    private final PurgeCommandsConsumer purgeConsumer = new PurgeCommandsConsumer(
+            markForErasure, restoreUserItems, purgeUserItems, new ObjectMapper());
 
     private static final String SAGA_ID = "saga-1";
 
@@ -83,6 +88,30 @@ public class CollectionsSteps {
         return refsHeld.getOrDefault(user, 0);
     }
 
+    @When("^the orchestrator compensates the saga$")
+    public void orchestratorCompensates() {
+        // RESTORE_USER_CONTENT: sent when a SIBLING participant failed. This service is not the one
+        // that failed and does not get to decide — it only obeys
+        lastConfirmation = purgeConsumer.handle("{\"type\":\"RESTORE_USER_CONTENT\",\"email\":\""
+                + "alice\",\"sagaId\":\"" + SAGA_ID + "\"}");
+    }
+
+    @When("^the orchestrator closes the saga$")
+    public void orchestratorClosesTheSaga() {
+        // ERASE_USER_CONTENT: the closure, and the only command that destroys anything here
+        lastConfirmation = purgeConsumer.handle("{\"type\":\"ERASE_USER_CONTENT\",\"email\":\""
+                + "alice\",\"sagaId\":\"" + SAGA_ID + "\"}");
+    }
+
+    @Then("^a late compensation brings nothing back$")
+    public void lateCompensationBringsNothingBack() {
+        // the orchestrator never sends this after a closure — its state machine forbids it — but if
+        // one did arrive, past the closure there is nothing reserved to restore and nothing to throw
+        orchestratorCompensates();
+        assertTrue(store.list("alice", "favourites").isEmpty(),
+                "erased is erased: a compensation cannot resurrect what the closure deleted");
+    }
+
     @When("^a purge command arrives naming nobody$")
     public void purgeCommandNamingNobody() {
         lastConfirmation = purgeConsumer.handle(
@@ -116,7 +145,7 @@ public class CollectionsSteps {
         assertEquals(RemoveItem.Status.NOT_SAVED, lastRemove);
     }
 
-    @Then("^(\\d+) references were removed$")
+    @Then("^(\\d+) references were reserved$")
     public void referencesRemoved(int count) {
         assertEquals(count, lastPurgeCount);
     }
