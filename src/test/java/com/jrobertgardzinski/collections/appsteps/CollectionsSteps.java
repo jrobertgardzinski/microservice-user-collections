@@ -88,7 +88,7 @@ public class CollectionsSteps {
         return refsHeld.getOrDefault(user, 0);
     }
 
-    @When("^the orchestrator compensates the saga$")
+    @When("^the ORCHESTRATOR compensates the SAGA$")
     public void orchestratorCompensates() {
         // RESTORE_USER_CONTENT: sent when a SIBLING participant failed. This service is not the one
         // that failed and does not get to decide — it only obeys
@@ -96,7 +96,7 @@ public class CollectionsSteps {
                 + "alice\",\"sagaId\":\"" + SAGA_ID + "\"}");
     }
 
-    @When("^the orchestrator closes the saga$")
+    @When("^the ORCHESTRATOR closes the SAGA$")
     public void orchestratorClosesTheSaga() {
         // ERASE_USER_CONTENT: the closure, and the only command that destroys anything here
         lastConfirmation = purgeConsumer.handle("{\"type\":\"ERASE_USER_CONTENT\",\"email\":\""
@@ -118,7 +118,7 @@ public class CollectionsSteps {
                 "{\"type\":\"PURGE_USER_CONTENT\",\"email\":\"\",\"sagaId\":\"saga-nobody\"}");
     }
 
-    @Then("^a confirmation for that saga goes back to the orchestrator$")
+    @Then("^a CONFIRMATION for that SAGA goes back to the ORCHESTRATOR$")
     public void confirmationGoesBack() throws Exception {
         // the orchestrator matches on both: the type tells it which participant answered, the saga
         // id which run — a confirmation carrying the wrong one is as useless as none at all
@@ -129,7 +129,7 @@ public class CollectionsSteps {
         assertEquals(SAGA_ID, body.path("sagaId").asText());
     }
 
-    @Then("^no confirmation goes back to the orchestrator$")
+    @Then("^no CONFIRMATION goes back to the ORCHESTRATOR$")
     public void noConfirmationGoesBack() {
         assertTrue(lastConfirmation.isEmpty(),
                 "a confirmation would claim a purge happened that never did");
@@ -145,7 +145,7 @@ public class CollectionsSteps {
         assertEquals(RemoveItem.Status.NOT_SAVED, lastRemove);
     }
 
-    @Then("^(\\d+) references were reserved$")
+    @Then("^(\\d+) REFERENCES were reserved$")
     public void referencesRemoved(int count) {
         assertEquals(count, lastPurgeCount);
     }

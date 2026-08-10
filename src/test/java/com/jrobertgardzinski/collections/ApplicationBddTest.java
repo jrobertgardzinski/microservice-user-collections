@@ -12,12 +12,16 @@ import static io.cucumber.junit.platform.engine.Constants.PLUGIN_PROPERTY_NAME;
 /**
  * The Gherkin scenarios driven through the USE CASES (application entry point) — every scenario
  * except the {@code @http} refusals, which only exist at the wire (statuses 400/401 have no
- * application-layer counterpart). Its twin {@link HttpBddTest} runs the same feature over the
- * wire; the one feature file, two entry points, is the spec-first pattern from microservice-security.
+ * application-layer counterpart). Its twin {@link HttpBddTest} runs the same specs over the wire;
+ * one Gherkin file per use case in the top-level {@code specs/} dir, two entry points — the
+ * spec-first pattern from microservice-security.
  */
 @Suite
 @IncludeEngines("cucumber")
-@SelectClasspathResource("features")
+@SelectClasspathResource("save-item.feature")
+@SelectClasspathResource("remove-item.feature")
+@SelectClasspathResource("list-items.feature")
+@SelectClasspathResource("account-erasure.feature")
 @ConfigurationParameter(key = GLUE_PROPERTY_NAME, value = "com.jrobertgardzinski.collections.appsteps")
 @ConfigurationParameter(key = FILTER_TAGS_PROPERTY_NAME, value = "not @http")
 @ConfigurationParameter(key = PLUGIN_PROPERTY_NAME,
