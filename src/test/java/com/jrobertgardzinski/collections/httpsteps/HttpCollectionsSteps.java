@@ -77,7 +77,7 @@ public class HttpCollectionsSteps {
         assertEquals(400, lastStatus, "an impossible reference is refused at the boundary");
     }
 
-    @When("^somebody with no identity asks for \"([^\"]+)\"$")
+    @When("^a GUEST asks for \"([^\"]+)\"$")
     public void asksWithoutIdentity(String collection) {
         try {
             HttpRequest request = HttpRequest.newBuilder(

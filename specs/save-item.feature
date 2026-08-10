@@ -1,10 +1,11 @@
+# engineer's note: idempotency is the estate's standing law (ADR 0006), enforced by the
+# generic IdempotentCommandsTest — which is why it is not restated scenario by scenario
 Feature: Saving a REFERENCE
 
-  A signed-in person saves an opaque REFERENCE — a meme, a comment — into a named
-  COLLECTION. The service keeps the REFERENCE and nothing else: it never interprets
-  what it points at. Saving is idempotent BY DEFAULT (workspace ADR 0006 — enforced
-  by the generic IdempotentCommandsTest, not restated per scenario); the scenarios
-  below pin the REPLY a caller can lean on.
+  A USER saves an opaque REFERENCE — a meme, a comment — into a named COLLECTION.
+  The service keeps the REFERENCE and nothing else: it never interprets what it
+  points at. Saving twice is safe by the workspace's standing law (ADR 0006); the
+  scenarios below pin the REPLY a caller can lean on.
 
   Rule: A saved REFERENCE lands in the COLLECTION
 
