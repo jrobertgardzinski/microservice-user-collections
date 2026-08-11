@@ -4,6 +4,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jrobertgardzinski.collections.application.ItemReferences;
 import com.jrobertgardzinski.collections.application.PurgeDeletedItem;
 import com.jrobertgardzinski.collections.domain.ItemRef;
+import io.qameta.allure.Epic;
+import io.qameta.allure.Feature;
+import io.qameta.allure.Story;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.MockConsumer;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
@@ -38,6 +41,9 @@ import static org.junit.jupiter.api.Assertions.fail;
  * with the dead rows left behind rather than wedging the partition. The last of those is the
  * design's whole thesis, so it gets the longest test.
  */
+@Epic("Infrastructure")
+@Feature("Deletion cascade")
+@Story("Consumer loop")
 class CascadeConsumerLoopTest {
 
     private static final TopicPartition MEMES =

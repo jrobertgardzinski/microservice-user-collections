@@ -1,5 +1,7 @@
 package com.jrobertgardzinski.collections.domain;
 
+import io.qameta.allure.Epic;
+import io.qameta.allure.Feature;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -18,6 +20,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * "a redelivery keeps the FIRST instant" and "the illegal combination cannot be built" — are
  * invisible to every test that runs above this record.
  */
+@Epic("Domain")
+@Feature("Saved item lifecycle")
 class SavedItemTest {
 
     private static final Instant FIRST_DELIVERY = Instant.parse("2026-08-08T10:00:00Z");

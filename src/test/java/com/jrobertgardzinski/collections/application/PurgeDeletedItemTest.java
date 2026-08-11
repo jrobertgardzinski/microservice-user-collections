@@ -2,6 +2,8 @@ package com.jrobertgardzinski.collections.application;
 
 import com.jrobertgardzinski.collections.domain.ItemRef;
 import com.jrobertgardzinski.collections.infrastructure.InMemoryCollectionStore;
+import io.qameta.allure.Epic;
+import io.qameta.allure.Feature;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -20,6 +22,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * one operation in the service that reaches across users, so "it took something that was not
  * meant to go" is the failure that matters, not "it missed one".
  */
+@Epic("Use case")
+@Feature("Purge deleted item")
 class PurgeDeletedItemTest {
 
     private InMemoryCollectionStore store;

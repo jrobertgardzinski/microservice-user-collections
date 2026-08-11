@@ -3,6 +3,9 @@ package com.jrobertgardzinski.collections.infrastructure;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jrobertgardzinski.collections.application.PurgeDeletedItem;
 import com.jrobertgardzinski.collections.domain.ItemRef;
+import io.qameta.allure.Epic;
+import io.qameta.allure.Feature;
+import io.qameta.allure.Story;
 import org.apache.kafka.clients.consumer.MockConsumer;
 import org.apache.kafka.clients.consumer.OffsetResetStrategy;
 import org.junit.jupiter.api.DisplayName;
@@ -46,6 +49,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * repositories rather than only inside each — see {@link MemeDeletedPactTest} and
  * {@link CommentsDeletedPactTest}.
  */
+@Epic("Infrastructure")
+@Feature("Deletion cascade")
+@Story("Topic names")
 class CascadeTopicNamesTest {
 
     /** See the class comment: the twin literal lives in microservice-memes. */

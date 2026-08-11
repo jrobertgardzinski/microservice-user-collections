@@ -4,6 +4,9 @@ import com.jrobertgardzinski.collections.domain.ItemRef;
 import com.jrobertgardzinski.collections.infrastructure.JdbcCollectionStore;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
+import io.qameta.allure.Epic;
+import io.qameta.allure.Feature;
+import io.qameta.allure.Story;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -30,6 +33,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * full scan of everyone's collections, and nothing in a green functional test would ever say so —
  * so the migration's index is asserted from the catalogue, the way an operator would check it.
  */
+@Epic("Infrastructure")
+@Feature("Collection persistence")
+@Story("Item axis and its index")
 class ItemReferenceAxisTest {
 
     private DataSource dataSource;

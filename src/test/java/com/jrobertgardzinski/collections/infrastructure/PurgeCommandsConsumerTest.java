@@ -9,6 +9,9 @@ import com.jrobertgardzinski.collections.application.MarkUserItemsForErasure;
 import com.jrobertgardzinski.collections.application.PurgeUserItems;
 import com.jrobertgardzinski.collections.application.RestoreUserItems;
 import com.jrobertgardzinski.collections.domain.ItemRef;
+import io.qameta.allure.Epic;
+import io.qameta.allure.Feature;
+import io.qameta.allure.Story;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -26,6 +29,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * listener test): purge commands carry the leaver's e-mail — PII that must not reach a log line,
  * neither from a malformed payload's WARN nor from the successful purge's INFO.
  */
+@Epic("Saga")
+@Feature("Purge commands")
+@Story("Command handling")
 class PurgeCommandsConsumerTest {
 
     private final ObjectMapper mapper = new ObjectMapper();

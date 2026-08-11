@@ -8,6 +8,8 @@ import com.jrobertgardzinski.collections.application.RestoreUserItems;
 import com.jrobertgardzinski.collections.application.SaveItem;
 import com.jrobertgardzinski.collections.domain.ItemRef;
 import com.jrobertgardzinski.collections.infrastructure.InMemoryCollectionStore;
+import io.qameta.allure.Epic;
+import io.qameta.allure.Feature;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.TestFactory;
 
@@ -27,6 +29,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * NOT_SAVED), which are per-operation behaviour. A new command joins the law by joining
  * COMMANDS below.
  */
+@Epic("Use case")
+@Feature("Idempotent commands")
 class IdempotentCommandsTest {
 
     /**

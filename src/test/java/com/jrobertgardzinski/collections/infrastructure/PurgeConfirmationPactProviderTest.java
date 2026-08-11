@@ -10,6 +10,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jrobertgardzinski.collections.application.MarkUserItemsForErasure;
 import com.jrobertgardzinski.collections.application.PurgeUserItems;
 import com.jrobertgardzinski.collections.application.RestoreUserItems;
+import io.qameta.allure.Epic;
+import io.qameta.allure.Feature;
+import io.qameta.allure.Story;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.TestTemplate;
 import org.junit.jupiter.api.condition.EnabledIf;
@@ -25,6 +28,9 @@ import java.util.List;
  * handler — pure and broker-free, its confirmation is simply its return value — emits that shape.
  * Skipped, not failed, when the consumer repo is not checked out next to this one.
  */
+@Epic("Contract")
+@Feature("Account-deletion saga")
+@Story("Confirmation emitted")
 @Provider("microservice-user-collections")
 @PactFolder("../microservice-offboarding/pacts")
 @EnabledIf(value = "consumerPactsCheckedOut",

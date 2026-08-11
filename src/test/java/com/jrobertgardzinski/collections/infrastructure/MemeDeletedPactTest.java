@@ -12,6 +12,9 @@ import au.com.dius.pact.core.model.messaging.MessagePact;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jrobertgardzinski.collections.application.PurgeDeletedItem;
 import com.jrobertgardzinski.collections.domain.ItemRef;
+import io.qameta.allure.Epic;
+import io.qameta.allure.Feature;
+import io.qameta.allure.Story;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -45,6 +48,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * @see CascadeTopicNamesTest for the same name pinned against the subscription this service opens
  */
+@Epic("Contract")
+@Feature("Cascade events")
+@Story("Meme deleted")
 @ExtendWith(PactConsumerTestExt.class)
 @PactTestFor(providerName = "microservice-memes", providerType = ProviderType.ASYNCH,
         pactVersion = PactSpecVersion.V3)

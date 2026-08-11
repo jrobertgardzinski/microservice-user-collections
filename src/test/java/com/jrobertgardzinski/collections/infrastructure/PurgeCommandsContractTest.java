@@ -14,6 +14,9 @@ import com.jrobertgardzinski.collections.application.MarkUserItemsForErasure;
 import com.jrobertgardzinski.collections.application.PurgeUserItems;
 import com.jrobertgardzinski.collections.application.RestoreUserItems;
 import com.jrobertgardzinski.collections.domain.ItemRef;
+import io.qameta.allure.Epic;
+import io.qameta.allure.Feature;
+import io.qameta.allure.Story;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
@@ -37,6 +40,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * are opaque, so there is no per-item fate to choose — the closure carries a policy this consumer
  * simply never reads, which is exactly what a tolerant reader is allowed to do.
  */
+@Epic("Contract")
+@Feature("Account-deletion saga")
+@Story("Commands consumed")
 @ExtendWith(PactConsumerTestExt.class)
 @PactTestFor(providerName = "microservice-offboarding", providerType = ProviderType.ASYNCH,
         pactVersion = PactSpecVersion.V3)

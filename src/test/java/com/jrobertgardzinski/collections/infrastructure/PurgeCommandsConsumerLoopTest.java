@@ -12,6 +12,9 @@ import com.jrobertgardzinski.collections.application.PurgeUserItems;
 import com.jrobertgardzinski.collections.application.RestoreUserItems;
 import com.jrobertgardzinski.collections.domain.SavedItem;
 import com.jrobertgardzinski.collections.domain.ItemRef;
+import io.qameta.allure.Epic;
+import io.qameta.allure.Feature;
+import io.qameta.allure.Story;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.MockConsumer;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
@@ -52,6 +55,9 @@ import static org.junit.jupiter.api.Assertions.fail;
  * that the loop rewinds to is re-added via {@code schedulePollTask} — that re-add plays the role
  * of the broker redelivering from the committed offset.
  */
+@Epic("Saga")
+@Feature("Purge commands")
+@Story("Consumer loop")
 class PurgeCommandsConsumerLoopTest {
 
     private static final TopicPartition PARTITION =

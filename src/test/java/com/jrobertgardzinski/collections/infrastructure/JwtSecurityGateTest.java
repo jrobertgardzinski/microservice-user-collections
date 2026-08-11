@@ -1,6 +1,8 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.qameta.allure.Epic;
+import io.qameta.allure.Feature;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -21,6 +23,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * The offline gate against real Ed25519 tokens: it must accept a well-signed, unexpired token from
  * security and reject everything else — tampering, expiry, a foreign issuer, a wrong key.
  */
+@Epic("Infrastructure")
+@Feature("Offline token verification")
 class JwtSecurityGateTest {
 
     private static final Base64.Encoder B64 = Base64.getUrlEncoder().withoutPadding();

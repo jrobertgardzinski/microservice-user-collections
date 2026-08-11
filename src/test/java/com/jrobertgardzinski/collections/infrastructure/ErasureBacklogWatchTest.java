@@ -7,6 +7,8 @@ import com.jrobertgardzinski.collections.application.ItemErasure;
 import com.jrobertgardzinski.collections.application.MarkUserItemsForErasure;
 import com.jrobertgardzinski.collections.domain.ItemRef;
 import com.jrobertgardzinski.collections.domain.SavedItem;
+import io.qameta.allure.Epic;
+import io.qameta.allure.Feature;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -32,6 +34,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * returns fewer rows for ever. The rows are hidden (which the leaver asked for) and not erased
  * (which the GDPR asked for), and without this watch nobody would ever learn the difference.
  */
+@Epic("Saga")
+@Feature("Erasure backlog alarm")
 class ErasureBacklogWatchTest {
 
     private static final String LEAVER = "leaver@example.com";

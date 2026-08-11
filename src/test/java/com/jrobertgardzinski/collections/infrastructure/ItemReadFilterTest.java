@@ -1,5 +1,7 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
+import io.qameta.allure.Epic;
+import io.qameta.allure.Feature;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -37,6 +39,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * adapter MUST still contain such a query, so the rule cannot be satisfied by quietly deleting the
  * erasure feature.
  */
+@Epic("Saga")
+@Feature("Marked rows stay hidden")
 class ItemReadFilterTest {
 
     private static final Path ADAPTERS =

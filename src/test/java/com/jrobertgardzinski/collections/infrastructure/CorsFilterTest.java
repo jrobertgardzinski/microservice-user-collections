@@ -1,6 +1,8 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
 import io.helidon.webserver.WebServer;
+import io.qameta.allure.Epic;
+import io.qameta.allure.Feature;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -19,6 +21,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * origin gets its echo and a fully-answered preflight (which never reaches the routes); a foreign
  * origin gets no CORS headers at all — the browser then refuses on our behalf.
  */
+@Epic("Infrastructure")
+@Feature("Cross-origin requests")
 class CorsFilterTest {
 
     private WebServer server;

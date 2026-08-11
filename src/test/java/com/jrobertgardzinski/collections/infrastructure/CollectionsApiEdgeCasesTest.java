@@ -4,6 +4,9 @@ import com.jrobertgardzinski.collections.application.ListItems;
 import com.jrobertgardzinski.collections.application.RemoveItem;
 import com.jrobertgardzinski.collections.application.SaveItem;
 import io.helidon.webserver.WebServer;
+import io.qameta.allure.Epic;
+import io.qameta.allure.Feature;
+import io.qameta.allure.Story;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -22,6 +25,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * SQLException-turned-500 from deep inside the JDBC store. The happy paths live in the Gherkin
  * scenarios; only the edges are here.
  */
+@Epic("Infrastructure")
+@Feature("HTTP API")
+@Story("Refusals at the edge")
 class CollectionsApiEdgeCasesTest {
 
     private static final String VALID_TOKEN = "valid-token";

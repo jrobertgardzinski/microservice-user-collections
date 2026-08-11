@@ -8,6 +8,8 @@ import com.jrobertgardzinski.collections.infrastructure.JdbcCollectionStore;
 import com.jrobertgardzinski.collections.infrastructure.JdbcItemErasure;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
+import io.qameta.allure.Epic;
+import io.qameta.allure.Feature;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -24,6 +26,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** The JDBC adapter against a real database: H2 in PostgreSQL mode, migrated by Flyway. */
+@Epic("Infrastructure")
+@Feature("Collection persistence")
 class JdbcCollectionStoreTest {
 
     private JdbcCollectionStore store;

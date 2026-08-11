@@ -8,6 +8,8 @@ import com.jrobertgardzinski.collections.application.PurgeUserItems;
 import com.jrobertgardzinski.collections.application.RestoreUserItems;
 import com.jrobertgardzinski.collections.domain.SavedItem;
 import com.jrobertgardzinski.collections.domain.ItemRef;
+import io.qameta.allure.Epic;
+import io.qameta.allure.Feature;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
@@ -28,6 +30,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@link Main#stallSeconds} must fail fast but READABLY on a broken env value — unparseable,
  * zero and negative alike, naming the variable it refuses.
  */
+@Epic("Infrastructure")
+@Feature("Health probes")
 class PurgeConsumerHealthTest {
 
     /** A store that holds nothing: these tests are about the probes, not about the purge. */

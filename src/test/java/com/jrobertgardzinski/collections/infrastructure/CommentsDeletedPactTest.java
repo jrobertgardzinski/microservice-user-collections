@@ -13,6 +13,9 @@ import au.com.dius.pact.core.model.messaging.MessagePact;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jrobertgardzinski.collections.application.PurgeDeletedItem;
 import com.jrobertgardzinski.collections.domain.ItemRef;
+import io.qameta.allure.Epic;
+import io.qameta.allure.Feature;
+import io.qameta.allure.Story;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -48,6 +51,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@link org.apache.kafka.clients.producer.ProducerRecord} and reports its {@code topic()}, so a
  * producer that moves the announcement elsewhere fails there, against THIS file.
  */
+@Epic("Contract")
+@Feature("Cascade events")
+@Story("Comments deleted")
 @ExtendWith(PactConsumerTestExt.class)
 @PactTestFor(providerName = "microservice-comments", providerType = ProviderType.ASYNCH,
         pactVersion = PactSpecVersion.V3)

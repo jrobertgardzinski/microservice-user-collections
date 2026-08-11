@@ -6,6 +6,9 @@ import ch.qos.logback.core.read.ListAppender;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jrobertgardzinski.collections.application.PurgeDeletedItem;
 import com.jrobertgardzinski.collections.domain.ItemRef;
+import io.qameta.allure.Epic;
+import io.qameta.allure.Feature;
+import io.qameta.allure.Story;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -31,6 +34,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *   <li>the log lines carry the memeId (an id, not PII) and the number of refs removed.</li>
  * </ol>
  */
+@Epic("Infrastructure")
+@Feature("Deletion cascade")
+@Story("Event handling")
 class CascadeConsumerTest {
 
     private static final String MEME = "3a8f0f6e-1b2c-4d5e-8f90-1a2b3c4d5e6f";
