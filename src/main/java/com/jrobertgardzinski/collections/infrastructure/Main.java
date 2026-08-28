@@ -185,6 +185,7 @@ public final class Main {
     private static final Duration BACKLOG_WATCH_INTERVAL = Duration.ofMinutes(1);
 
     public static void main(String[] args) {
+        ProfileGuard.requireDeclaredProfile("COLLECTIONS_PROFILE", System.getenv("COLLECTIONS_PROFILE"));
         int port = Integer.parseInt(System.getenv().getOrDefault("COLLECTIONS_PORT", "8092"));
         String securityUrl = System.getenv().getOrDefault("SECURITY_URL", "http://localhost:8080");
 
