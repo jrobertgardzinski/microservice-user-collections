@@ -2,6 +2,8 @@ package com.jrobertgardzinski.collections.infrastructure;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jrobertgardzinski.collections.application.Observations;
+import com.jrobertgardzinski.collections.domain.Observation;
 import com.jrobertgardzinski.collections.application.MarkUserItemsForErasure;
 import com.jrobertgardzinski.collections.application.PurgeUserItems;
 import com.jrobertgardzinski.collections.application.RestoreUserItems;
@@ -28,7 +30,6 @@ import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * This service's side of the account-deletion saga. It consumes {@code content-commands} (the
@@ -170,11 +171,12 @@ public class PurgeCommandsConsumer {
      * {@code collections_kafka_records_dropped_total} in {@link MetricsEndpoint}, the sibling of
      * comments' {@code comments_kafka_records_dropped_total}. One increment means one account
      * deletion this service did not finish, and the saga is about to compensate: without it the
-     * bounded retry would trade a silent late purge for a silent lost one, which is no better. Static
-     * because the exporter is a plain function of the process (no registry in this service) and a
-     * Prometheus counter is per process anyway.
+     * bounded retry would trade a silent late purge for a silent lost one, which is no better.
+     *
+     * <p>It is no longer counted here. This class STATES the fact and {@link ExportedObservations}
+     * decides it is spelled as a counter — the drop is a sentence about account deletion, while
+     * "counter, per process, with a topic label" is the watching tool's opinion about it.
      */
-    private static final AtomicLong RECORDS_DROPPED = new AtomicLong();
 
     /** The reversible mark; its confirmation is what the orchestrator's quorum counts. */
     static final String MARK = "PURGE_USER_CONTENT";
@@ -187,6 +189,8 @@ public class PurgeCommandsConsumer {
     private final RestoreUserItems restoreUserItems;
     private final PurgeUserItems purgeUserItems;
     private final ObjectMapper mapper;
+    /** Where a dropped saga command is STATED; the adapter decides it is a counter. */
+    private final Observations observations;
     private final long initialBackoffMillis;
     private final Duration retryBudget;
 
@@ -205,17 +209,18 @@ public class PurgeCommandsConsumer {
 
     public PurgeCommandsConsumer(MarkUserItemsForErasure markForErasure,
                                  RestoreUserItems restoreUserItems,
-                                 PurgeUserItems purgeUserItems, ObjectMapper mapper) {
+                                 PurgeUserItems purgeUserItems, ObjectMapper mapper,
+                                 Observations observations) {
         this(markForErasure, restoreUserItems, purgeUserItems, mapper,
-                DEFAULT_INITIAL_BACKOFF_MILLIS);
+                DEFAULT_INITIAL_BACKOFF_MILLIS, observations);
     }
 
     /** Test seam: the loop-under-test shortens the retry backoff instead of sleeping seconds. */
     PurgeCommandsConsumer(MarkUserItemsForErasure markForErasure, RestoreUserItems restoreUserItems,
                           PurgeUserItems purgeUserItems, ObjectMapper mapper,
-                          long initialBackoffMillis) {
+                          long initialBackoffMillis, Observations observations) {
         this(markForErasure, restoreUserItems, purgeUserItems, mapper, initialBackoffMillis,
-                RETRY_BUDGET);
+                RETRY_BUDGET, observations);
     }
 
     /**
@@ -224,19 +229,15 @@ public class PurgeCommandsConsumer {
      */
     PurgeCommandsConsumer(MarkUserItemsForErasure markForErasure, RestoreUserItems restoreUserItems,
                           PurgeUserItems purgeUserItems, ObjectMapper mapper,
-                          long initialBackoffMillis, Duration retryBudget) {
+                          long initialBackoffMillis, Duration retryBudget,
+                          Observations observations) {
+        this.observations = observations;
         this.markForErasure = markForErasure;
         this.restoreUserItems = restoreUserItems;
         this.purgeUserItems = purgeUserItems;
         this.mapper = mapper;
         this.initialBackoffMillis = initialBackoffMillis;
         this.retryBudget = retryBudget;
-    }
-
-    /** The process-wide count of records abandoned after their budget; read by
-     *  {@link MetricsEndpoint}. */
-    static long recordsDropped() {
-        return RECORDS_DROPPED.get();
     }
 
     /**
@@ -573,7 +574,7 @@ public class PurgeCommandsConsumer {
      */
     private void dropAfterBudget(ConsumerRecord<String, String> record, Exception failure,
                                  Consumer<String, String> consumer) {
-        RECORDS_DROPPED.incrementAndGet();
+        observations.record(new Observation.SagaCommandDropped(COMMANDS_TOPIC));
         String cid = header(record, CID_HEADER);
         if (cid != null) {
             MDC.put("cid", cid);   // the drop line belongs to the trace of the deletion request

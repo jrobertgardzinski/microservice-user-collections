@@ -15,10 +15,13 @@ final class MetricsEndpoint {
 
     private static final long STARTED = System.currentTimeMillis();
 
-    private MetricsEndpoint() {
+    private final ExportedObservations observations;
+
+    MetricsEndpoint(ExportedObservations observations) {
+        this.observations = observations;
     }
 
-    static void handle(ServerRequest req, ServerResponse res) {
+    void handle(ServerRequest req, ServerResponse res) {
         res.send(body());
     }
 
@@ -30,8 +33,12 @@ final class MetricsEndpoint {
      * record this instance abandoned after its retry budget (see
      * {@link PurgeCommandsConsumer#RETRY_BUDGET}). One increment means one account deletion this
      * service did not finish — the saga is about to compensate, and nobody else will say so.
+     *
+     * <p>The two saga lines are read from {@link ExportedObservations} rather than from statics the
+     * producing classes owned. The JVM lines above them stay as they are: memory, threads and
+     * uptime are properties of a process that anything can read, not facts this service knows.
      */
-    static String body() {
+    String body() {
         Runtime rt = Runtime.getRuntime();
         return "# TYPE collections_jvm_memory_used_bytes gauge\n"
                 + "collections_jvm_memory_used_bytes " + (rt.totalMemory() - rt.freeMemory()) + "\n"
@@ -42,10 +49,10 @@ final class MetricsEndpoint {
                 + "# TYPE collections_kafka_records_dropped_total counter\n"
                 + "collections_kafka_records_dropped_total{topic=\""
                 + PurgeCommandsConsumer.COMMANDS_TOPIC + "\"} "
-                + PurgeCommandsConsumer.recordsDropped() + "\n"
+                + observations.recordsDropped() + "\n"
                 // the GDPR line: rows this service is hiding but has not been told to erase. It
                 // must fall back to zero on its own, so a gauge — see ErasureBacklogWatch
                 + "# TYPE collections_erasure_backlog gauge\n"
-                + "collections_erasure_backlog " + ErasureBacklogWatch.backlog() + "\n";
+                + "collections_erasure_backlog " + observations.erasureBacklog() + "\n";
     }
 }

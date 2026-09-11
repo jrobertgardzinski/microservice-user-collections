@@ -1,6 +1,7 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jrobertgardzinski.collections.application.Observations;
 import com.jrobertgardzinski.collections.application.CollectionStore;
 import com.jrobertgardzinski.collections.application.ItemErasure;
 import com.jrobertgardzinski.collections.application.MarkUserItemsForErasure;
@@ -45,7 +46,7 @@ class PurgeConsumerHealthTest {
 
     private final PurgeCommandsConsumer consumer = new PurgeCommandsConsumer(
             new MarkUserItemsForErasure(erasure, java.time.Clock.systemUTC()),
-            new RestoreUserItems(erasure), new PurgeUserItems(erasure), new ObjectMapper());
+            new RestoreUserItems(erasure), new PurgeUserItems(erasure), new ObjectMapper(), Observations.SILENT);
 
     @Test
     void a_fresh_consumer_is_healthy() {

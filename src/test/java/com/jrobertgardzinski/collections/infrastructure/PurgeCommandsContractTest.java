@@ -10,6 +10,7 @@ import au.com.dius.pact.core.model.annotations.Pact;
 import au.com.dius.pact.core.model.messaging.Message;
 import au.com.dius.pact.core.model.messaging.MessagePact;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jrobertgardzinski.collections.application.Observations;
 import com.jrobertgardzinski.collections.application.MarkUserItemsForErasure;
 import com.jrobertgardzinski.collections.application.PurgeUserItems;
 import com.jrobertgardzinski.collections.application.RestoreUserItems;
@@ -53,7 +54,7 @@ class PurgeCommandsContractTest {
     private final InMemoryCollectionStore store = new InMemoryCollectionStore();
     private final PurgeCommandsConsumer consumer = new PurgeCommandsConsumer(
             new MarkUserItemsForErasure(store, Clock.systemUTC()), new RestoreUserItems(store),
-            new PurgeUserItems(store), new ObjectMapper());
+            new PurgeUserItems(store), new ObjectMapper(), Observations.SILENT);
 
     @Pact(consumer = "microservice-user-collections")
     MessagePact purgeCommand(MessagePactBuilder builder) {

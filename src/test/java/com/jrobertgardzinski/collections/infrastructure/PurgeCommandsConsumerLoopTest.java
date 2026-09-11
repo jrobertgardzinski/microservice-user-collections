@@ -68,6 +68,10 @@ class PurgeCommandsConsumerLoopTest {
                                                          // milliseconds, not the production second
 
     private final ObjectMapper mapper = new ObjectMapper();
+    // one per test, which is the point of it no longer being static: a counter shared between
+    // tests had to be read "before" and compared relative, and a forgotten reset made a
+    // green test out of a wrong number
+    private final ExportedObservations observations = new ExportedObservations();
     private final InMemoryCollectionStore store = new InMemoryCollectionStore();
 
     private final ListAppender<ILoggingEvent> logLines = new ListAppender<>();
@@ -168,7 +172,6 @@ class PurgeCommandsConsumerLoopTest {
     @Test
     void a_store_failure_inside_the_budget_commits_nothing_and_the_loop_retries_after_backoff()
             throws Exception {
-        long droppedBefore = PurgeCommandsConsumer.recordsDropped();
         store.add("alice@example.com", "favourites", new ItemRef("meme", "42"));
         MockProducer<String, String> producer =
                 new MockProducer<>(true, null, new StringSerializer(), new StringSerializer());
@@ -200,7 +203,7 @@ class PurgeCommandsConsumerLoopTest {
         assertEquals(1, producer.history().size(), "one confirmation, after the retry");
         assertTrue(store.list("alice@example.com", "favourites").isEmpty(), "purged on retry");
         assertTrue(loopThread.isAlive(), "an infrastructure failure must not kill the loop");
-        assertEquals(droppedBefore, PurgeCommandsConsumer.recordsDropped(),
+        assertEquals(0, observations.recordsDropped(),
                 "a hiccup healed well inside the retry budget must drop nothing: the budget only"
                         + " bounds the retrying, it must not shorten it");
     }
@@ -284,7 +287,6 @@ class PurgeCommandsConsumerLoopTest {
         // collections database that came back half an hour later purged the collections of an
         // account the saga had long since compensated and handed back to its owner — with no
         // signal to him or to an operator. The budget ends the retrying while the saga still cares.
-        long droppedBefore = PurgeCommandsConsumer.recordsDropped();
         store.add("alice@example.com", "favourites", new ItemRef("meme", "42"));
         MockProducer<String, String> producer =
                 new MockProducer<>(true, null, new StringSerializer(), new StringSerializer());
@@ -310,7 +312,7 @@ class PurgeCommandsConsumerLoopTest {
 
         assertTrue(failures.get() >= 2,
                 "the budget must buy real retries, not just the first attempt");
-        assertEquals(droppedBefore + 1, PurgeCommandsConsumer.recordsDropped(),
+        assertEquals(1, observations.recordsDropped(),
                 "the drop must be COUNTED — collections_kafka_records_dropped_total is the only"
                         + " signal an operator gets that a deletion was not finished here");
         assertTrue(producer.history().isEmpty(),
@@ -328,7 +330,7 @@ class PurgeCommandsConsumerLoopTest {
                 "the line must carry the exception TYPE chain, which is what triages: " + logged);
         assertFalse(logged.contains("alice@example.com"),
                 "and never an exception MESSAGE — it can carry the leaver's address: " + logged);
-        assertTrue(MetricsEndpoint.body()
+        assertTrue(new MetricsEndpoint(observations).body()
                         .contains("collections_kafka_records_dropped_total{topic=\""
                                 + PurgeCommandsConsumer.COMMANDS_TOPIC + "\"} "),
                 "/metrics must expose the counter, or nobody can alert on it");
@@ -339,7 +341,6 @@ class PurgeCommandsConsumerLoopTest {
         // the other half of the fix: the budget bounds the handling of a RECORD. A failure with no
         // consumed record behind it — a commit, a poll, the broker probe — keeps retrying for ever,
         // because there is no purge in flight whose lateness could hurt anybody.
-        long droppedBefore = PurgeCommandsConsumer.recordsDropped();
         store.add("alice@example.com", "favourites", new ItemRef("meme", "42"));
         MockProducer<String, String> producer =
                 new MockProducer<>(true, null, new StringSerializer(), new StringSerializer());
@@ -359,7 +360,7 @@ class PurgeCommandsConsumerLoopTest {
         startLoop(purge, consumer, producer);
         await("several failed commits, well past the tiny budget", () -> commits.get() >= 5);
 
-        assertEquals(droppedBefore, PurgeCommandsConsumer.recordsDropped(),
+        assertEquals(0, observations.recordsDropped(),
                 "a commit failure must never drop a record, however long it lasts");
         assertTrue(loopThread.isAlive(), "and must not end the loop either");
     }
@@ -538,7 +539,7 @@ class PurgeCommandsConsumerLoopTest {
                                                     Duration budget) {
         return new PurgeCommandsConsumer(new MarkUserItemsForErasure(erasure, Clock.systemUTC()),
                 new RestoreUserItems(erasure), new PurgeUserItems(erasure), mapper, backoffMillis,
-                budget);
+                budget, observations);
     }
 
     private void startLoop(PurgeCommandsConsumer purge, MockConsumer<String, String> consumer,

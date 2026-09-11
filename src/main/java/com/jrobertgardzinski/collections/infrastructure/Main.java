@@ -198,6 +198,11 @@ public final class Main {
         JdbcItemErasure erasure = new JdbcItemErasure(dataSource);
         SecurityGate gate = new JwtSecurityGate(securityUrl);
 
+        // the composition root's one watcher: everything that states a fact is handed THIS, and
+        // /metrics reads it back out. Swap it for Observations.SILENT and the service runs
+        // unobserved rather than broken — which is the whole point of the port
+        ExportedObservations observations = new ExportedObservations();
+
         CollectionsApi collections = new CollectionsApi(
                 new SaveItem(store), new RemoveItem(store), new ListItems(store), gate);
 
@@ -209,7 +214,8 @@ public final class Main {
         if (!bootstrap.isEmpty()) {
             PurgeCommandsConsumer consumer = new PurgeCommandsConsumer(
                     new MarkUserItemsForErasure(erasure, Clock.systemUTC()),
-                    new RestoreUserItems(erasure), new PurgeUserItems(erasure), new ObjectMapper());
+                    new RestoreUserItems(erasure), new PurgeUserItems(erasure), new ObjectMapper(),
+                    observations);
             Thread.ofVirtual().name("purge-consumer").start(() -> consumer.run(bootstrap));
             purgeConsumer = consumer;
 
@@ -217,8 +223,10 @@ public final class Main {
             // It runs beside the saga consumer and only when there IS a broker — without one there
             // is no saga, so there are no marks and nothing to watch (the same coupling the two
             // Spring participants get for free from @EnableScheduling)
-            ErasureBacklogWatch backlogWatch = new ErasureBacklogWatch(erasure, Clock.systemUTC(),
-                    ErasureBacklogWatch.DEFAULT_STUCK_AFTER);
+            ErasureBacklogWatch backlogWatch = new ErasureBacklogWatch(
+                    new com.jrobertgardzinski.collections.application.WatchErasureBacklog(
+                            erasure, com.jrobertgardzinski.collections.config.ErasureTolerance.DEFAULT,
+                            observations, Clock.systemUTC()));
             Thread.ofVirtual().name("erasure-backlog-watch").start(() -> {
                 while (!Thread.currentThread().isInterrupted()) {
                     backlogWatch.check();
@@ -286,7 +294,7 @@ public final class Main {
                                 res.status(503).send("purge consumer thread stalled");
                             }
                         })
-                        .get("/metrics", MetricsEndpoint::handle)
+                        .get("/metrics", new MetricsEndpoint(observations)::handle)
                         .register("/collections", collections))
                 .build()
                 .start();

@@ -1,6 +1,7 @@
 package com.jrobertgardzinski.collections.appsteps;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jrobertgardzinski.collections.application.Observations;
 import com.jrobertgardzinski.collections.application.ListItems;
 import com.jrobertgardzinski.collections.application.MarkUserItemsForErasure;
 import com.jrobertgardzinski.collections.application.PurgeUserItems;
@@ -32,7 +33,7 @@ public class CollectionsSteps {
     private final RestoreUserItems restoreUserItems = new RestoreUserItems(store);
     private final PurgeUserItems purgeUserItems = new PurgeUserItems(store);
     private final PurgeCommandsConsumer purgeConsumer = new PurgeCommandsConsumer(
-            markForErasure, restoreUserItems, purgeUserItems, new ObjectMapper());
+            markForErasure, restoreUserItems, purgeUserItems, new ObjectMapper(), Observations.SILENT);
 
     private static final String SAGA_ID = "saga-1";
 

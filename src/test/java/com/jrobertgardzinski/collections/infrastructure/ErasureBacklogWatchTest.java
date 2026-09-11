@@ -61,8 +61,19 @@ class ErasureBacklogWatchTest {
     }
 
     private ErasureBacklogWatch watchAt(Instant now) {
-        return new ErasureBacklogWatch(store, Clock.fixed(now, ZoneOffset.UTC),
-                Duration.ofMinutes(30));
+        return watching(store, now);
+    }
+
+    /** The real chain: the use case decides, this class only runs it and reports what it decided. */
+    private static ErasureBacklogWatch watching(
+            com.jrobertgardzinski.collections.application.ItemErasure erasure, Instant now) {
+        return new ErasureBacklogWatch(
+                new com.jrobertgardzinski.collections.application.WatchErasureBacklog(
+                        erasure,
+                        new com.jrobertgardzinski.collections.config.ErasureTolerance(
+                                Duration.ofMinutes(30)),
+                        com.jrobertgardzinski.collections.application.Observations.SILENT,
+                        Clock.fixed(now, ZoneOffset.UTC)));
     }
 
     @Test
@@ -122,8 +133,7 @@ class ErasureBacklogWatchTest {
             }
         };
 
-        int verdict = new ErasureBacklogWatch(unreadable, Clock.fixed(MARKED_AT, ZoneOffset.UTC),
-                Duration.ofMinutes(30)).check();
+        int verdict = watching(unreadable, MARKED_AT).check();
 
         assertEquals(-1, verdict, "a failed read is not a clear backlog and must not read as one");
         assertTrue(logLines.list.stream().map(ILoggingEvent::getFormattedMessage)
