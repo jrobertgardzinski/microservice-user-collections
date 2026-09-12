@@ -172,6 +172,13 @@
             <artifactId>observation</artifactId>
             <version>1.0.0-SNAPSHOT</version>
         </dependency>
+        <dependency>
+            <!-- the words this service shares with identity and the orchestrator when an account
+                 closes: the command names and the confirmation's -->
+            <groupId>com.jrobertgardzinski</groupId>
+            <artifactId>account-closure</artifactId>
+            <version>1.0.0-SNAPSHOT</version>
+        </dependency>
         <!-- consumer-driven contract: the pact test states which saga commands this service
              understands; the generated pact (pacts/, committed) is verified against the REAL
              producer code by microservice-security's provider tests -->

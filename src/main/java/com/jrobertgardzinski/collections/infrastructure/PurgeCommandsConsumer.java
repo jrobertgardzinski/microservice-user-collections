@@ -1,5 +1,6 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
+import com.jrobertgardzinski.closure.ClosureMessages;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jrobertgardzinski.observation.Observations;
@@ -179,11 +180,11 @@ public class PurgeCommandsConsumer {
      */
 
     /** The reversible mark; its confirmation is what the orchestrator's quorum counts. */
-    static final String MARK = "PURGE_USER_CONTENT";
+    static final String MARK = ClosureMessages.PURGE_USER_CONTENT;
     /** The closure: the orchestrator says the case is settled, so the refs may finally go. */
-    static final String ERASE = "ERASE_USER_CONTENT";
+    static final String ERASE = ClosureMessages.ERASE_USER_CONTENT;
     /** The compensation: the marks come off and the leaver's lists are whole again. */
-    static final String RESTORE = "RESTORE_USER_CONTENT";
+    static final String RESTORE = ClosureMessages.RESTORE_USER_CONTENT;
 
     private final MarkUserItemsForErasure markForErasure;
     private final RestoreUserItems restoreUserItems;
@@ -329,7 +330,7 @@ public class PurgeCommandsConsumer {
                 markForErasure.execute(email), sagaId);
         try {
             var confirmation = mapper.createObjectNode()
-                    .put("type", "USER_CONTENT_PURGED")
+                    .put(ClosureMessages.Field.TYPE, ClosureMessages.USER_CONTENT_PURGED)
                     .put("email", email)
                     // envelope version (workspace ADR 0004): fields only ever added within version 1
                     .put("version", 1);
