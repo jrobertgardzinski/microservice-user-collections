@@ -1,5 +1,6 @@
 package com.jrobertgardzinski.collections.application;
 
+import com.jrobertgardzinski.observation.Observations;
 import com.jrobertgardzinski.collections.config.ErasureTolerance;
 import com.jrobertgardzinski.collections.domain.Observation;
 import com.jrobertgardzinski.collections.domain.SavedItem;
@@ -29,11 +30,11 @@ public class WatchErasureBacklog {
 
     private final ItemErasure erasure;
     private final ErasureTolerance tolerance;
-    private final Observations observations;
+    private final Observations<Observation> observations;
     private final Clock clock;
 
     public WatchErasureBacklog(ItemErasure erasure, ErasureTolerance tolerance,
-                               Observations observations, Clock clock) {
+                               Observations<Observation> observations, Clock clock) {
         this.erasure = erasure;
         this.tolerance = tolerance;
         this.observations = observations;

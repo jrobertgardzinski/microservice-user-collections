@@ -1,7 +1,7 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
 import com.jrobertgardzinski.collections.application.ItemErasure;
-import com.jrobertgardzinski.collections.application.Observations;
+import com.jrobertgardzinski.observation.Observations;
 import com.jrobertgardzinski.collections.application.WatchErasureBacklog;
 import com.jrobertgardzinski.collections.config.ErasureTolerance;
 import com.jrobertgardzinski.collections.domain.ItemRef;
@@ -81,7 +81,7 @@ class ObservabilityIsOptionalTest {
         Instant markedAt = Instant.parse("2026-08-08T10:00:00Z");
 
         Observation.ErasureBacklog said = new WatchErasureBacklog(holding(markedAt),
-                new ErasureTolerance(Duration.ofMinutes(30)), Observations.SILENT,
+                new ErasureTolerance(Duration.ofMinutes(30)), Observations.<Observation>silent(),
                 Clock.fixed(markedAt.plus(Duration.ofHours(2)), ZoneOffset.UTC)).execute();
 
         // the obligation is still counted and still answered to the caller; the only thing missing

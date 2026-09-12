@@ -1,5 +1,6 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
+import com.jrobertgardzinski.collections.domain.Observation;
 import au.com.dius.pact.provider.PactVerifyProvider;
 import au.com.dius.pact.provider.junit5.MessageTestTarget;
 import au.com.dius.pact.provider.junit5.PactVerificationContext;
@@ -7,7 +8,7 @@ import au.com.dius.pact.provider.junit5.PactVerificationInvocationContextProvide
 import au.com.dius.pact.provider.junitsupport.Provider;
 import au.com.dius.pact.provider.junitsupport.loader.PactFolder;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.jrobertgardzinski.collections.application.Observations;
+import com.jrobertgardzinski.observation.Observations;
 import com.jrobertgardzinski.collections.application.MarkUserItemsForErasure;
 import com.jrobertgardzinski.collections.application.PurgeUserItems;
 import com.jrobertgardzinski.collections.application.RestoreUserItems;
@@ -63,7 +64,7 @@ class PurgeConfirmationPactProviderTest {
                     public int execute(String user) {
                         return 1;
                     }
-                }, new RestoreUserItems(null), new PurgeUserItems(null), new ObjectMapper(), Observations.SILENT);
+                }, new RestoreUserItems(null), new PurgeUserItems(null), new ObjectMapper(), Observations.<Observation>silent());
         return consumer.handle("{\"type\":\"PURGE_USER_CONTENT\","
                 + "\"sagaId\":\"7d9f9e2a-1f0a-4f6e-9a1b-2c3d4e5f6a7b\","
                 + "\"email\":\"leaver@example.com\"}").orElseThrow();

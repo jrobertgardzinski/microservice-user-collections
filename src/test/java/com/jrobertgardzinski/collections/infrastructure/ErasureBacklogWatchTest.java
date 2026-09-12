@@ -1,5 +1,6 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
+import com.jrobertgardzinski.collections.domain.Observation;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
@@ -72,7 +73,7 @@ class ErasureBacklogWatchTest {
                         erasure,
                         new com.jrobertgardzinski.collections.config.ErasureTolerance(
                                 Duration.ofMinutes(30)),
-                        com.jrobertgardzinski.collections.application.Observations.SILENT,
+                        com.jrobertgardzinski.observation.Observations.<Observation>silent(),
                         Clock.fixed(now, ZoneOffset.UTC)));
     }
 

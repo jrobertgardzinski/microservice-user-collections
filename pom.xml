@@ -166,6 +166,12 @@
             <artifactId>offline-jwt</artifactId>
             <version>1.0.0-SNAPSHOT</version>
         </dependency>
+        <dependency>
+            <!-- the port a service states its own facts through; the facts themselves stay ours -->
+            <groupId>com.jrobertgardzinski</groupId>
+            <artifactId>observation</artifactId>
+            <version>1.0.0-SNAPSHOT</version>
+        </dependency>
         <!-- consumer-driven contract: the pact test states which saga commands this service
              understands; the generated pact (pacts/, committed) is verified against the REAL
              producer code by microservice-security's provider tests -->

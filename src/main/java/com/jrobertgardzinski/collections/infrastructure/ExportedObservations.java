@@ -1,6 +1,6 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
-import com.jrobertgardzinski.collections.application.Observations;
+import com.jrobertgardzinski.observation.Observations;
 import com.jrobertgardzinski.collections.domain.Observation;
 
 import java.util.concurrent.atomic.AtomicLong;
@@ -26,7 +26,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * <p>A backlog that could NOT be read states nothing at all, so the gauge keeps its last value —
  * reporting zero would turn a failed database read into "the backlog is clear".
  */
-public final class ExportedObservations implements Observations {
+public final class ExportedObservations implements Observations<Observation> {
 
     private final AtomicLong erasureBacklog = new AtomicLong();
     private final AtomicLong recordsDropped = new AtomicLong();

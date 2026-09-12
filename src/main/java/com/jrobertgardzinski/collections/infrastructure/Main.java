@@ -1,5 +1,7 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
+import com.jrobertgardzinski.collections.domain.Observation;
+import com.jrobertgardzinski.observation.Observations;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jrobertgardzinski.collections.application.ListItems;
 import com.jrobertgardzinski.collections.application.PurgeDeletedItem;
@@ -199,7 +201,7 @@ public final class Main {
         SecurityGate gate = new JwtSecurityGate(securityUrl);
 
         // the composition root's one watcher: everything that states a fact is handed THIS, and
-        // /metrics reads it back out. Swap it for Observations.SILENT and the service runs
+        // /metrics reads it back out. Swap it for Observations.<Observation>silent() and the service runs
         // unobserved rather than broken — which is the whole point of the port
         ExportedObservations observations = new ExportedObservations();
 

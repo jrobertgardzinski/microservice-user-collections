@@ -2,7 +2,7 @@ package com.jrobertgardzinski.collections.infrastructure;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.jrobertgardzinski.collections.application.Observations;
+import com.jrobertgardzinski.observation.Observations;
 import com.jrobertgardzinski.collections.domain.Observation;
 import com.jrobertgardzinski.collections.application.MarkUserItemsForErasure;
 import com.jrobertgardzinski.collections.application.PurgeUserItems;
@@ -190,7 +190,7 @@ public class PurgeCommandsConsumer {
     private final PurgeUserItems purgeUserItems;
     private final ObjectMapper mapper;
     /** Where a dropped saga command is STATED; the adapter decides it is a counter. */
-    private final Observations observations;
+    private final Observations<Observation> observations;
     private final long initialBackoffMillis;
     private final Duration retryBudget;
 
@@ -210,7 +210,7 @@ public class PurgeCommandsConsumer {
     public PurgeCommandsConsumer(MarkUserItemsForErasure markForErasure,
                                  RestoreUserItems restoreUserItems,
                                  PurgeUserItems purgeUserItems, ObjectMapper mapper,
-                                 Observations observations) {
+                                 Observations<Observation> observations) {
         this(markForErasure, restoreUserItems, purgeUserItems, mapper,
                 DEFAULT_INITIAL_BACKOFF_MILLIS, observations);
     }
@@ -218,7 +218,7 @@ public class PurgeCommandsConsumer {
     /** Test seam: the loop-under-test shortens the retry backoff instead of sleeping seconds. */
     PurgeCommandsConsumer(MarkUserItemsForErasure markForErasure, RestoreUserItems restoreUserItems,
                           PurgeUserItems purgeUserItems, ObjectMapper mapper,
-                          long initialBackoffMillis, Observations observations) {
+                          long initialBackoffMillis, Observations<Observation> observations) {
         this(markForErasure, restoreUserItems, purgeUserItems, mapper, initialBackoffMillis,
                 RETRY_BUDGET, observations);
     }
@@ -230,7 +230,7 @@ public class PurgeCommandsConsumer {
     PurgeCommandsConsumer(MarkUserItemsForErasure markForErasure, RestoreUserItems restoreUserItems,
                           PurgeUserItems purgeUserItems, ObjectMapper mapper,
                           long initialBackoffMillis, Duration retryBudget,
-                          Observations observations) {
+                          Observations<Observation> observations) {
         this.observations = observations;
         this.markForErasure = markForErasure;
         this.restoreUserItems = restoreUserItems;

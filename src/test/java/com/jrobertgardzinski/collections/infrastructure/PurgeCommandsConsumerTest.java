@@ -1,11 +1,12 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
+import com.jrobertgardzinski.collections.domain.Observation;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.jrobertgardzinski.collections.application.Observations;
+import com.jrobertgardzinski.observation.Observations;
 import com.jrobertgardzinski.collections.application.MarkUserItemsForErasure;
 import com.jrobertgardzinski.collections.application.PurgeUserItems;
 import com.jrobertgardzinski.collections.application.RestoreUserItems;
@@ -39,7 +40,7 @@ class PurgeCommandsConsumerTest {
     private final InMemoryCollectionStore store = new InMemoryCollectionStore();
     private final PurgeCommandsConsumer consumer = new PurgeCommandsConsumer(
             new MarkUserItemsForErasure(store, java.time.Clock.systemUTC()),
-            new RestoreUserItems(store), new PurgeUserItems(store), mapper, Observations.SILENT);
+            new RestoreUserItems(store), new PurgeUserItems(store), mapper, Observations.<Observation>silent());
 
     private final ListAppender<ILoggingEvent> logLines = new ListAppender<>();
 
