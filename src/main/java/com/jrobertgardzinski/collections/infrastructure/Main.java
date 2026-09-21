@@ -26,10 +26,11 @@ import java.time.Duration;
  * <p>Storage is Postgres when {@code DB_URL} is set, else in-memory H2. Every collections route is
  * gated by microservice-security's JWKS ({@code SECURITY_URL}, default the local security).
  *
- * <p>Two probes, two questions. {@code /health} is READINESS: 503 once the consumer stops
- * completing cycles for longer than {@code COLLECTIONS_CONSUMER_STALL_SEC} (default 60) — a broken
+ * <p>Two probes, two questions. {@code /health} is READINESS: 503 once the consumer stops making
+ * progress for longer than {@code COLLECTIONS_CONSUMER_STALL_SEC} (default 150, floored at
+ * {@link #CONSUMER_STALL_FLOOR} — below it the service REFUSES to boot) — a broken
  * dependency (database down, broker away, a record retried inside its budget) shows here, because a
- * cycle only completes when the whole poll-handle-confirm-commit chain works, and because at most
+ * record only finishes when the whole poll-handle-confirm chain works, and because at most
  * once per {@link PurgeCommandsConsumer#PROBE_EVERY} the loop demands a real answer from the
  * broker (empty polls return normally against a dead one, so a quiet topic alone proves nothing).
  * {@code /alive} is
@@ -116,6 +117,30 @@ public final class Main {
      *  javadoc, the manifests and the operator's head at once. */
     static final Duration DEFAULT_ALIVE_STALL = Duration.ofSeconds(240);
 
+    /**
+     * The /health stall tolerance's floor, derived from the RECORD budget — because readiness
+     * measures something else than liveness does. The loop deliberately keeps ONE record alive for
+     * {@link PurgeCommandsConsumer#RETRY_BUDGET} (90s), retrying it across rewound cycles, and
+     * while it does, nothing finishes: the readiness marker stands still by design. A tolerance
+     * below that budget therefore reports a purge riding out a database restart as a stalled
+     * consumer — the lamp turning red for precisely the self-healing case the budget exists to
+     * cover, and an operator who learns to ignore the lamp has no lamp. The minute on top pays for
+     * the attempts on either side of the budget: the failure that opens it and the one that
+     * closes it are both outside the 90s. It does NOT stretch to two full {@link
+     * Database#WORST_BLOCK}s, and is not meant to — unlike {@link #ALIVE_STALL_FLOOR}, which
+     * must cover the worst legal iteration because a restart follows it, this is a MINIMUM
+     * below which the lamp certainly lies. It is the allowance both Spring participants carry
+     * ({@code SagaParticipantConfig.STALL_FLOOR}), so the three participants of one saga tell an
+     * operator one story — the discipline {@link #ALIVE_STALL_FLOOR} already follows towards
+     * microservice-offboarding.
+     */
+    static final Duration CONSUMER_STALL_FLOOR = PurgeCommandsConsumer.RETRY_BUDGET.plusSeconds(60);
+
+    /** The code default for {@code COLLECTIONS_CONSUMER_STALL_SEC}: the floor itself, spelled as
+     *  the constant rather than as 150, so the two can never drift apart. The old default was 60s
+     *  — below the budget it was supposed to outlast, which is the whole finding. */
+    static final Duration DEFAULT_CONSUMER_STALL = CONSUMER_STALL_FLOOR;
+
     /** The derived worst case plus {@link #FLOOR_MARGIN_PERCENT}, rounded UP to whole seconds —
      *  the tolerance is configured and logged in seconds, so the floor lives in them too. */
     private static Duration withMargin(Duration derived) {
@@ -160,6 +185,28 @@ public final class Main {
     }
 
     /**
+     * The /health tolerance, REFUSED rather than quietly raised when it sits below
+     * {@link #CONSUMER_STALL_FLOOR} — the shape both Spring participants use for the same
+     * decision, and the difference from {@link #flooredAliveStall} above is deliberate. A
+     * liveness tolerance too small only ever costs a WARN and a correction nobody depends on
+     * reading; a readiness tolerance is a number an operator writes into a healthcheck, a probe's
+     * {@code failureThreshold} and a runbook, and correcting it behind their back leaves all
+     * three quoting a tolerance the service does not use. So it says no, and says both numbers.
+     * Package-private for the test.
+     */
+    static Duration requiredConsumerStall(String name, Duration configured) {
+        if (configured.compareTo(CONSUMER_STALL_FLOOR) >= 0) {
+            return configured;
+        }
+        throw new IllegalArgumentException(name + "=" + configured.toSeconds() + "s is below the "
+                + CONSUMER_STALL_FLOOR.toSeconds() + "s floor: one purge command may legitimately"
+                + " hold this loop for a whole " + PurgeCommandsConsumer.RETRY_BUDGET.toSeconds()
+                + "s retry budget, plus the attempts that open and close it, and nothing finishes"
+                + " while it does — so a smaller tolerance would report a purge riding out a"
+                + " database restart as a stalled consumer. Raise it or leave it unset.");
+    }
+
+    /**
      * Parse a stall tolerance, failing FAST but READABLY: a bare NumberFormatException
      * ("For input string: ...") names neither the variable nor why the service died — this
      * message does. A zero or negative tolerance is refused too: it would declare every start
@@ -185,6 +232,43 @@ public final class Main {
 
     /** How often the erasure backlog is counted. A minute, like the siblings' scheduled watch. */
     private static final Duration BACKLOG_WATCH_INTERVAL = Duration.ofMinutes(1);
+
+    /** How long the stop waits for one loop to notice the interrupt and close its client. The
+     *  orchestrator's number: long enough for a poll and a leave-group round trip, short enough
+     *  that a broker which is ALSO gone cannot hold the shutdown open (a container that will not
+     *  die is killed anyway, and then the group is abandoned exactly as before). */
+    private static final Duration STOP_TIMEOUT = Duration.ofSeconds(5);
+
+    /**
+     * The JVM's shutdown hook over both Kafka loops, and the Thread it registered so a test can
+     * prove the registration happened and then drive the stop itself. Both loops exit on an
+     * interrupt and close their consumer on the way out ({@code run(String)}'s
+     * try-with-resources); joining is what makes that reachable at all, because daemon virtual
+     * threads are otherwise simply abandoned when the last non-daemon thread goes.
+     */
+    static Thread registerStopHook(Thread... consumers) {
+        Thread hook = new Thread(() -> stopConsumers(consumers), "collections-consumers-stop");
+        Runtime.getRuntime().addShutdownHook(hook);
+        return hook;
+    }
+
+    /**
+     * Interrupt every loop FIRST and only then wait for them, so the two stops overlap instead of
+     * queueing their timeouts one behind the other. Package-private for the test.
+     */
+    static void stopConsumers(Thread... consumers) {
+        for (Thread consumer : consumers) {
+            consumer.interrupt();
+        }
+        for (Thread consumer : consumers) {
+            try {
+                consumer.join(STOP_TIMEOUT.toMillis());
+            } catch (InterruptedException stopping) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
+    }
 
     public static void main(String[] args) {
         ProfileGuard.requireDeclaredProfile("COLLECTIONS_PROFILE", System.getenv("COLLECTIONS_PROFILE"));
@@ -218,7 +302,8 @@ public final class Main {
                     new MarkUserItemsForErasure(erasure, Clock.systemUTC()),
                     new RestoreUserItems(erasure), new PurgeUserItems(erasure), new ObjectMapper(),
                     observations);
-            Thread.ofVirtual().name("purge-consumer").start(() -> consumer.run(bootstrap));
+            Thread purgeThread =
+                    Thread.ofVirtual().name("purge-consumer").start(() -> consumer.run(bootstrap));
             purgeConsumer = consumer;
 
             // the erasure backlog alarm: rows a lost closure command left hidden but not erased.
@@ -247,11 +332,21 @@ public final class Main {
             // /health that reddens for cleanup debt is a /health operators learn to ignore
             CascadeConsumer cascade =
                     new CascadeConsumer(new PurgeDeletedItem(store), new ObjectMapper());
-            Thread.ofVirtual().name("cascade-consumer").start(() -> cascade.run(bootstrap));
+            Thread cascadeThread = Thread.ofVirtual().name("cascade-consumer")
+                    .start(() -> cascade.run(bootstrap));
+
+            // both loops are written around an interrupt, and until now nobody ever delivered
+            // one: the JVM took the two daemon threads down mid-poll, KafkaConsumer.close() never
+            // ran and neither group was left, so every restart of this service began with
+            // ~session.timeout.ms of nobody consuming content-commands — a saga hop delayed for
+            // the length of a deploy. The orchestrator has registered this hook all along
+            registerStopHook(purgeThread, cascadeThread);
         }
         PurgeCommandsConsumer watchedConsumer = purgeConsumer;
-        Duration consumerStall = Duration.ofSeconds(stallSeconds("COLLECTIONS_CONSUMER_STALL_SEC",
-                System.getenv().getOrDefault("COLLECTIONS_CONSUMER_STALL_SEC", "60")));
+        Duration consumerStall = requiredConsumerStall("COLLECTIONS_CONSUMER_STALL_SEC",
+                Duration.ofSeconds(stallSeconds("COLLECTIONS_CONSUMER_STALL_SEC",
+                        System.getenv().getOrDefault("COLLECTIONS_CONSUMER_STALL_SEC",
+                                String.valueOf(DEFAULT_CONSUMER_STALL.toSeconds())))));
         // 240s default: it has to sit ABOVE ALIVE_STALL_FLOOR, and the floor is now the honest
         // SUM of one iteration's blocks (rewind lookup 20s + probe 5s + poll 1s + database 40s +
         // send 30s + commit 20s + backoff 30s = 146s, plus 25% margin = 183s) rather than the
@@ -271,7 +366,7 @@ public final class Main {
                         .addFilter(new CorrelationFilter())
                         .get("/health", (req, res) -> {
                             // READINESS, not TCP-open: with Kafka configured this turns 503 once
-                            // the purge-consumer loop stops completing cycles for longer than
+                            // the purge-consumer loop stops finishing records for longer than
                             // COLLECTIONS_CONSUMER_STALL_SEC — dependencies included (a DB
                             // outage or a poison pill stalls the cycles even though the thread
                             // lives). The compose healthcheck then shows the container as

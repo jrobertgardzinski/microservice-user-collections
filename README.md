@@ -49,7 +49,7 @@ Path segments wider than the schema's columns are refused with 400 at the edge, 
 `SQLException` from below.
 
 Two probes, two questions: `/health` (readiness) turns 503 when the saga consumer stops
-completing cycles or the broker stops answering the round-trip probe; `/alive` (liveness) only
+finishing records or the broker stops answering the round-trip probe; `/alive` (liveness) only
 watches that the loop thread still schedules, so a database or broker outage does not get a pod
 restarted for nothing. `/metrics` exposes, among others, the dropped-records counter and the
 erasure backlog gauge.

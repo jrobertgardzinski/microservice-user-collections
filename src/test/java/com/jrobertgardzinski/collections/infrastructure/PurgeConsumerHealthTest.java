@@ -30,7 +30,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * markers directly (package-private seam) instead of sleeping out a real stall; the seconds-scale
  * offsets double as a unit check (a millis/nanos mix-up flips the verdicts). Alongside:
  * {@link Main#stallSeconds} must fail fast but READABLY on a broken env value — unparseable,
- * zero and negative alike, naming the variable it refuses.
+ * zero and negative alike, naming the variable it refuses — and {@link Main#requiredConsumerStall}
+ * must refuse a readiness tolerance that cannot outlast one record's retry budget.
  */
 @Epic("Infrastructure")
 @Feature("Health probes")
@@ -122,6 +123,37 @@ class PurgeConsumerHealthTest {
                 "the fail-fast message must name the variable to fix");
         assertTrue(failure.getMessage().contains("-5"),
                 "the fail-fast message must quote the refused value");
+    }
+
+    @Test
+    void a_readiness_tolerance_below_the_retry_budget_is_refused_naming_both_numbers() {
+        // The finding this pins. /health's tolerance used to default to 60s and be checked for
+        // nothing but being positive, while the loop deliberately keeps ONE record alive for a
+        // 90s RETRY_BUDGET during which no record finishes: a purge riding out a database
+        // restart therefore read as a stalled consumer and took the favourites API out of the
+        // Service for exactly the self-healing case the budget exists to cover. The two Spring
+        // participants refuse such a tolerance at boot; this one does too now
+        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
+                () -> Main.requiredConsumerStall("COLLECTIONS_CONSUMER_STALL_SEC",
+                        Duration.ofSeconds(60)));
+        assertTrue(refused.getMessage().contains("COLLECTIONS_CONSUMER_STALL_SEC"),
+                "the refusal must name the variable to fix");
+        assertTrue(refused.getMessage().contains("60"),
+                "and the value it refuses: " + refused.getMessage());
+        assertTrue(refused.getMessage()
+                        .contains(String.valueOf(Main.CONSUMER_STALL_FLOOR.toSeconds())),
+                "and the floor it must reach: " + refused.getMessage());
+
+        // the floor is this service's OWN budget plus the attempts around it, never a number
+        // copied from the twins — and the default has to clear its own floor
+        assertEquals(PurgeCommandsConsumer.RETRY_BUDGET.plusSeconds(60), Main.CONSUMER_STALL_FLOOR,
+                "the readiness floor is derived from RETRY_BUDGET, not written down");
+        assertTrue(Main.CONSUMER_STALL_FLOOR.compareTo(PurgeCommandsConsumer.RETRY_BUDGET) > 0,
+                "a tolerance at or below the budget is the defect itself");
+        assertEquals(Main.DEFAULT_CONSUMER_STALL,
+                Main.requiredConsumerStall("COLLECTIONS_CONSUMER_STALL_SEC",
+                        Main.DEFAULT_CONSUMER_STALL),
+                "a default the guard rejects would be no default at all");
     }
 
     @Test

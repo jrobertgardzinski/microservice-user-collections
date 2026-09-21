@@ -195,7 +195,9 @@ public class PurgeCommandsConsumer {
     private final long initialBackoffMillis;
     private final Duration retryBudget;
 
-    // the readiness marker /health watches: refreshed on every completed poll-handle-commit cycle
+    // the readiness marker /health watches: refreshed by every RECORD that finishes its work and
+    // by every completed poll-handle-commit cycle — a batch of fifty synchronous confirmations
+    // takes longer than any sane tolerance, and progress is progress even before the offsets move
     // (and when the loop starts, so a service still warming up is not born unhealthy).
     // System.nanoTime, not currentTimeMillis: the marker measures elapsed time, and the wall
     // clock can jump (NTP step) — backwards would fake a 503, forwards would mask a real stall.
@@ -242,8 +244,10 @@ public class PurgeCommandsConsumer {
     }
 
     /**
-     * READINESS, behind /health: true while the loop keeps COMPLETING cycles within the stall
-     * tolerance. Cycles stop completing when a dependency is broken — database down, broker
+     * READINESS, behind /health: true while the loop keeps MAKING PROGRESS within the stall
+     * tolerance — a record finishing its work counts, not only a whole batch committing, or a
+     * healthy poll of fifty synchronous confirmations would read as a stall. Progress stops when
+     * a dependency is broken — database down, broker
      * unreachable, a record being retried inside its budget — so /health turning 503 means "this
      * instance cannot currently do its saga share", whether or not the thread itself is fine. "Broker
      * unreachable" is honest even on a QUIET topic: empty polls return normally against a dead
@@ -253,8 +257,8 @@ public class PurgeCommandsConsumer {
      * detection time, so the configured tolerance is not the whole promise: a broker that dies
      * the instant AFTER a successful probe leaves the marker moving for up to one
      * {@code PROBE_EVERY} (10s) before the next probe even asks, plus its {@code PROBE_TIMEOUT}
-     * (5s) — a 60s {@code COLLECTIONS_CONSUMER_STALL_SEC} really means "noticed within about
-     * 75s". Read the env as the tolerance it is, not as a detection deadline. That buys
+     * (5s) — a 150s {@code COLLECTIONS_CONSUMER_STALL_SEC} really means "noticed within about
+     * 165s". Read the env as the tolerance it is, not as a detection deadline. That buys
      * visibility (the compose healthcheck marks the container unhealthy in
      * {@code docker compose ps}), not a restart — plain compose never restarts an unhealthy
      * container; an orchestrator (k3s, Swarm) acting on the same probe would.
@@ -377,6 +381,12 @@ public class PurgeCommandsConsumer {
         try (KafkaConsumer<String, String> consumer = new KafkaConsumer<>(consumerProps(bootstrapServers));
              KafkaProducer<String, String> producer = new KafkaProducer<>(producerProps(bootstrapServers))) {
             run(consumer, producer);
+            // the stop interrupt has done its job (cutting a poll, a send or a backoff sleep
+            // short) and the loop always leaves with the flag set; clear it so the close() that
+            // follows can still leave the group instead of throwing InterruptException at the
+            // first blocking call — an uncleanly abandoned group costs the next start a whole
+            // session.timeout.ms of silence on content-commands
+            Thread.interrupted();
         } catch (Exception fatal) {
             // only reachable from client construction or close — a config error no retry can fix,
             // but one that must not vanish silently with the daemon thread
@@ -421,6 +431,17 @@ public class PurgeCommandsConsumer {
                 for (ConsumerRecord<String, String> record : records) {
                     try {
                         handleRecord(record, producer);
+                        // readiness counts RECORDS, not batches. A batch is up to
+                        // MAX_POLL_RECORDS commands and each one pays its own synchronous
+                        // send().get(), so a poll that is succeeding normally can easily take
+                        // longer than any tolerance an operator can sensibly configure — and a
+                        // marker that only moves at commitSync() would then call a loop doing
+                        // exactly what it should a stalled one (the defect the two Spring
+                        // participants fixed with their per-record heartbeat). A record that
+                        // finished its work is progress. Nothing here weakens the retry's
+                        // signal: while ONE record fails nothing finishes, so the marker still
+                        // freezes and /health still reddens
+                        lastCycleNanos = System.nanoTime();
                     } catch (InterruptException | InterruptedException stopping) {
                         throw stopping;   // a stop request is not a handling failure
                     } catch (Exception handlingFailed) {

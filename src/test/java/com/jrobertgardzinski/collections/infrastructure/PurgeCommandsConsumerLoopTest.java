@@ -35,8 +35,10 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -523,7 +525,68 @@ class PurgeCommandsConsumerLoopTest {
                         + " exactly the probe that must notice");
     }
 
+    @Test
+    void a_batch_whose_records_keep_finishing_stays_ready_past_the_tolerance() throws Exception {
+        // The finding this pins: the readiness marker moved once per BATCH, and a batch is up to
+        // MAX_POLL_RECORDS commands each paying its own synchronous send().get(). A poll that is
+        // succeeding normally therefore outlives any tolerance an operator can sensibly set, and
+        // /health calls a loop doing exactly what it should a stalled one. No tolerance value
+        // fixes a per-batch marker — only counting a finished RECORD as progress does
+        Duration tolerance = Duration.ofMillis(500);
+        int records = 10;
+        long perRecordMillis = 100;   // 10 x 100ms = one healthy batch twice the tolerance long
+        store.add("alice@example.com", "favourites", new ItemRef("meme", "42"));
+        MockProducer<String, String> producer =
+                new MockProducer<>(true, null, new StringSerializer(), new StringSerializer());
+        AtomicReference<PurgeCommandsConsumer> loop = new AtomicReference<>();
+        List<Boolean> readyWhileHandling = new CopyOnWriteArrayList<>();
+        ItemErasure slowStore = new DelegatingErasure(store) {
+            @Override
+            public List<SavedItem> activeOf(String user) {
+                // the work one command really pays — a database round trip and, after it, the
+                // confirmation's ack — made long enough to see without waiting out a real one
+                sleepFor(perRecordMillis);
+                readyWhileHandling.add(loop.get().healthy(tolerance));
+                return super.activeOf(user);
+            }
+        };
+        MockConsumer<String, String> consumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST);
+        consumer.updateBeginningOffsets(Map.of(PARTITION, 0L));
+        consumer.schedulePollTask(() -> {
+            consumer.rebalance(List.of(PARTITION));
+            for (long offset = 0; offset < records; offset++) {
+                consumer.addRecord(command(offset, PURGE_ALICE));   // ONE poll, ten commands
+            }
+        });
+        PurgeCommandsConsumer purge = consumerUnderTest(slowStore);
+        loop.set(purge);
+
+        long startedNanos = System.nanoTime();
+        startLoop(purge, consumer, producer);
+        await("the whole batch to commit", () -> committedOffset(consumer) >= records);
+        Duration batchTook = Duration.ofNanos(System.nanoTime() - startedNanos);
+
+        assertEquals(records, readyWhileHandling.size(), "every record must have been handled");
+        assertTrue(batchTook.compareTo(tolerance) > 0,
+                "the test is only worth anything if the batch really outlasts the tolerance:"
+                        + " it took " + batchTook.toMillis() + "ms against " + tolerance.toMillis()
+                        + "ms");
+        assertFalse(readyWhileHandling.contains(Boolean.FALSE),
+                "a batch whose records keep finishing is a loop making progress, and /health must"
+                        + " stay green through all of it — readiness went red at record "
+                        + (readyWhileHandling.indexOf(Boolean.FALSE) + 1) + " of " + records);
+    }
+
     // ---- the harness ----
+
+    /** The per-record work, slowed down; a stop request cuts it short like any other block. */
+    private static void sleepFor(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException stopping) {
+            Thread.currentThread().interrupt();
+        }
+    }
 
     private PurgeCommandsConsumer consumerUnderTest(ItemErasure erasure) {
         return consumerUnderTest(erasure, TEST_BACKOFF_MILLIS, PurgeCommandsConsumer.RETRY_BUDGET);

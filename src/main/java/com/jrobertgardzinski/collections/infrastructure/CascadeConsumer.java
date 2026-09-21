@@ -272,6 +272,10 @@ public class CascadeConsumer {
         try (KafkaConsumer<String, String> consumer =
                      new KafkaConsumer<>(consumerProps(bootstrapServers))) {
             run(consumer);
+            // the stop interrupt has done its job; clear the flag so close() can still leave the
+            // group cleanly instead of throwing InterruptException at its first blocking call
+            // (the same ending PurgeCommandsConsumer.run(String) has, for the same reason)
+            Thread.interrupted();
         } catch (Exception fatal) {
             // client construction or close: a config error no retry can fix, but one that must
             // not vanish silently with the daemon thread
