@@ -30,12 +30,17 @@ public final class ExportedObservations implements Observations<Observation> {
 
     private final AtomicLong erasureBacklog = new AtomicLong();
     private final AtomicLong recordsDropped = new AtomicLong();
+    private final AtomicLong purgesReservingNothing = new AtomicLong();
 
     @Override
     public void record(Observation observation) {
         switch (observation) {
             case Observation.ErasureBacklog backlog -> erasureBacklog.set(backlog.marked());
             case Observation.SagaCommandDropped dropped -> recordsDropped.incrementAndGet();
+            // a COUNTER for the same reason a dropped command is: one increment is one deletion
+            // this service confirmed while holding nothing, and the running total is what an alert
+            // can watch rise
+            case Observation.PurgeReservedNothing ignored -> purgesReservingNothing.incrementAndGet();
         }
     }
 
@@ -47,5 +52,10 @@ public final class ExportedObservations implements Observations<Observation> {
     /** The process-wide count of saga records abandoned after their retry budget. */
     public long recordsDropped() {
         return recordsDropped.get();
+    }
+
+    /** The process-wide count of purge confirmations that reserved not one reference. */
+    public long purgesReservingNothing() {
+        return purgesReservingNothing.get();
     }
 }

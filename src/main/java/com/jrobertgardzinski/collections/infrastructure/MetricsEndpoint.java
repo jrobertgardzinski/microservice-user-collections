@@ -53,6 +53,12 @@ final class MetricsEndpoint {
                 // the GDPR line: rows this service is hiding but has not been told to erase. It
                 // must fall back to zero on its own, so a gauge — see ErasureBacklogWatch
                 + "# TYPE collections_erasure_backlog gauge\n"
-                + "collections_erasure_backlog " + observations.erasureBacklog() + "\n";
+                + "collections_erasure_backlog " + observations.erasureBacklog() + "\n"
+                // the other GDPR line, and the sibling of memes' and comments' of the same name:
+                // deletions this service confirmed while reserving nothing. A rise beside a steady
+                // deletion rate is the address-change defect coming back
+                + "# TYPE collections_saga_purge_reserved_nothing_total counter\n"
+                + "collections_saga_purge_reserved_nothing_total "
+                + observations.purgesReservingNothing() + "\n";
     }
 }

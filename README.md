@@ -31,6 +31,18 @@ Boot/Micronaut/Quarkus siblings), hexagon-lite in a single module (`domain` / `a
   (`ItemReadFilterTest`) fails the suite if any other query names the base table — and the
   `collections_erasure_backlog` gauge alarms when a mark stays unresolved longer than any saga
   can last, because that failure is otherwise silent by construction.
+- **microservice-security, the other direction** — a member's address can move, and their saved
+  references move with it. Every row here is keyed by the address the token carried
+  (`collection_items.user_email`, the JWT's `sub`), so when security confirms a change of address it
+  announces `EMAIL_CHANGED` on `security-events` and this service re-keys those rows
+  (`SecurityEventsConsumer` → `RekeyUserItems`). Without it a member's lists simply read back `[]`
+  with no error, and their later deletion marked nothing while confirming an erasure, leaving the
+  references under an address the next registrant would inherit. It is a third Kafka loop, in its
+  own consumer group, watched by both probes and stopped by the same hook. The two topics are
+  independent, so a deletion can still overtake a rename; that is why the confirmation sent on
+  `usercollections-events` carries `reserved` — how many references the mark actually took out of
+  the member's lists — and why a zero raises `collections_saga_purge_reserved_nothing_total`
+  instead of reading as a successful erasure.
 - **collections-ui** (port 8093) — the favourites UI on its own origin, so the CORS conversation
   is real: an allowlisted origin gets its echo and a fully-answered preflight, a foreign one gets
   no CORS headers at all.

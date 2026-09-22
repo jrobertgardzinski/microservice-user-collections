@@ -291,6 +291,25 @@ public class PurgeCommandsConsumer {
      * {@link #RESTORE} is the compensation. Both of those END the case, so answering them would
      * tell the orchestrator something it has already decided. All three are idempotent, which is
      * what makes at-least-once delivery need no dedup here.
+     *
+     * <p><strong>The confirmation says how much it reserved.</strong> It used to go out
+     * unconditionally, so a mark that matched nothing was spelled on the wire in exactly the same
+     * words as one that took forty references out of a member's lists — which is how a leaver who
+     * had changed their address got a completed deletion with every saved reference still stored
+     * under the address they left. The count travels with the confirmation, and a zero raises
+     * {@link Observation.PurgeReservedNothing} and a WARN, because this is the one thing this
+     * service cannot resolve on its own: "I hold nothing of theirs" and "their rows are under the
+     * address they had yesterday and the rename has not reached me yet" are the same observation
+     * from in here, and the address on the command is all there is to go on. The rename normally
+     * arrives long before any deletion ({@link SecurityEventsConsumer}); when it loses that race,
+     * this is what makes the silence countable instead of invisible.
+     *
+     * <p>Reporting rather than REFUSING, and deliberately: withholding the confirmation would fail
+     * the deletion of every member who never saved anything — the common case — to catch the rarer
+     * one. So the participant stops asserting and starts reporting; the saga still completes, and
+     * the zero is visible on the wire, in the log and on a counter an alert can bind to.
+     * {@code reserved} is a field ADDED inside version 1, which workspace ADR 0004 permits: nothing
+     * was renamed or removed, and the pacts that pin this message pin only the fields they read.
      */
     public Optional<String> handle(String commandPayload) {
         JsonNode command;
@@ -330,12 +349,23 @@ public class PurgeCommandsConsumer {
                     restoreUserItems.execute(email), sagaId);
             return Optional.empty();
         }
-        LOG.info("marked {} collection refs of one leaver for erasure (saga {})",
-                markForErasure.execute(email), sagaId);
+        int reserved = markForErasure.execute(email);
+        LOG.info("marked {} collection refs of one leaver for erasure (saga {})", reserved, sagaId);
+        if (reserved == 0) {
+            observations.record(new Observation.PurgeReservedNothing());
+            LOG.warn("confirming a purge that reserved NOTHING (saga {}): either this member never"
+                    + " saved anything, or their references are still keyed by an address they have"
+                    + " changed and the rename has not been consumed yet", sagaId);
+        }
         try {
             var confirmation = mapper.createObjectNode()
                     .put(ClosureMessages.Field.TYPE, ClosureMessages.USER_CONTENT_PURGED)
                     .put("email", email)
+                    // how many references this mark actually took out of the member's lists; the
+                    // difference between an erasure and an answer that only looks like one
+                    .put("reserved", reserved)
+                    // how many references this mark actually took out of the member's lists; the
+                    // difference between an erasure and an answer that only looks like one
                     // envelope version (workspace ADR 0004): fields only ever added within version 1
                     .put("version", 1);
             // A BLANK sagaId is worse than an absent one. The orchestrator drops a confirmation
@@ -699,8 +729,12 @@ public class PurgeCommandsConsumer {
      * rewind on an N-partition topic into N of those waits inside a SINGLE iteration — no liveness
      * beat for N times the clock, which is how a plain broker outage could walk past the /alive
      * tolerance and earn a restart that fixes nothing.
+     *
+     * <p>Package-private rather than private because {@link SecurityEventsConsumer} rewinds on the
+     * same terms and for the same reason. It names no topic — it walks whatever this client is
+     * assigned — so there is nothing saga-shaped left in it to share wrongly.
      */
-    private static void rewindToCommitted(Consumer<String, String> consumer) {
+    static void rewindToCommitted(Consumer<String, String> consumer) {
         Set<TopicPartition> assignment = consumer.assignment();
         Map<TopicPartition, OffsetAndMetadata> committed = consumer.committed(assignment);
         for (TopicPartition partition : assignment) {

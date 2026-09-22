@@ -7,6 +7,7 @@ import com.jrobertgardzinski.collections.application.ListItems;
 import com.jrobertgardzinski.collections.application.PurgeDeletedItem;
 import com.jrobertgardzinski.collections.application.MarkUserItemsForErasure;
 import com.jrobertgardzinski.collections.application.PurgeUserItems;
+import com.jrobertgardzinski.collections.application.RekeyUserItems;
 import com.jrobertgardzinski.collections.application.RestoreUserItems;
 import com.jrobertgardzinski.collections.application.RemoveItem;
 import com.jrobertgardzinski.collections.application.SaveItem;
@@ -48,15 +49,20 @@ import java.time.Duration;
  * marks the container unhealthy) — plain compose does not restart on an unhealthy probe; a restart
  * is an orchestrator's job (k3s, Swarm) acting on the same signal.
  *
- * <p><b>Two Kafka threads, two different promises.</b> {@link PurgeCommandsConsumer} is the saga
- * participant described above — orchestrated, confirmed, retried within a bounded budget (see
+ * <p><b>Three Kafka threads, three different promises.</b> {@link PurgeCommandsConsumer} is the
+ * saga participant described above — orchestrated, confirmed, retried within a bounded budget (see
  * {@link PurgeCommandsConsumer#RETRY_BUDGET}), watched by both probes.
  * {@link CascadeConsumer} is the deletion cascade — choreographed, unconfirmed, best-effort, in
  * its own consumer group and watched by NEITHER probe. The split is deliberate and argued in
  * {@link CascadeConsumer}'s javadoc; the short version is that a stalled cleanup must never be
- * able to report this instance as unable to do its saga share. Without
- * {@code KAFKA_BOOTSTRAP_SERVERS} neither runs (dev, tests) — and then the probes have no loop to
- * distrust and both stay 200.
+ * able to report this instance as unable to do its saga share.
+ * {@link SecurityEventsConsumer} is the address change — nobody waits for it either, but its
+ * failure is not cleanup debt: rows left under an address a member no longer holds make every read
+ * for that member wrong and their later erasure a claim about nothing, so it stands behind both
+ * probes with the saga consumer. Its worst legal iteration is shorter than the one
+ * {@link #WORST_ITERATION} sums, so the floors below cover it as they stand. Without
+ * {@code KAFKA_BOOTSTRAP_SERVERS} none of the three runs (dev, tests) — and then the probes have no
+ * loop to distrust and both stay 200.
  */
 public final class Main {
 
@@ -240,11 +246,13 @@ public final class Main {
     private static final Duration STOP_TIMEOUT = Duration.ofSeconds(5);
 
     /**
-     * The JVM's shutdown hook over both Kafka loops, and the Thread it registered so a test can
-     * prove the registration happened and then drive the stop itself. Both loops exit on an
-     * interrupt and close their consumer on the way out ({@code run(String)}'s
+     * The JVM's shutdown hook over every Kafka loop, and the Thread it registered so a test can
+     * prove the registration happened and then drive the stop itself. Each loop exits on an
+     * interrupt and closes its consumer on the way out ({@code run(String)}'s
      * try-with-resources); joining is what makes that reachable at all, because daemon virtual
-     * threads are otherwise simply abandoned when the last non-daemon thread goes.
+     * threads are otherwise simply abandoned when the last non-daemon thread goes. Varargs rather
+     * than one parameter per loop, so that adding one — the rename consumer was the third — cannot
+     * be forgotten by leaving a signature as it was.
      */
     static Thread registerStopHook(Thread... consumers) {
         Thread hook = new Thread(() -> stopConsumers(consumers), "collections-consumers-stop");
@@ -282,6 +290,9 @@ public final class Main {
         // the erasure-aware side of the same table, and the ONLY adapter here allowed to read a
         // row the account-deletion saga has reserved (ADR 0007)
         JdbcItemErasure erasure = new JdbcItemErasure(dataSource);
+        // the same table along its THIRD axis: not a reference and not a reservation, but the one
+        // column that says whose row this is — and the one that moves when a member's address does
+        JdbcUserItemsRekey rekey = new JdbcUserItemsRekey(dataSource);
         SecurityGate gate = new JwtSecurityGate(securityUrl);
 
         // the composition root's one watcher: everything that states a fact is handed THIS, and
@@ -297,6 +308,7 @@ public final class Main {
         // and then /health has no loop to distrust (dev, tests: always OK)
         String bootstrap = System.getenv().getOrDefault("KAFKA_BOOTSTRAP_SERVERS", "").trim();
         PurgeCommandsConsumer purgeConsumer = null;
+        SecurityEventsConsumer rekeyConsumer = null;
         if (!bootstrap.isEmpty()) {
             PurgeCommandsConsumer consumer = new PurgeCommandsConsumer(
                     new MarkUserItemsForErasure(erasure, Clock.systemUTC()),
@@ -335,14 +347,24 @@ public final class Main {
             Thread cascadeThread = Thread.ofVirtual().name("cascade-consumer")
                     .start(() -> cascade.run(bootstrap));
 
-            // both loops are written around an interrupt, and until now nobody ever delivered
-            // one: the JVM took the two daemon threads down mid-poll, KafkaConsumer.close() never
-            // ran and neither group was left, so every restart of this service began with
+            // the THIRD loop: renames off security-events. Watched by both probes like the saga
+            // consumer and unlike the cascade — a stalled cleanup is cleanup debt, while a stalled
+            // rename has this instance answering one member's reads under a name they have left
+            SecurityEventsConsumer rekeyEvents =
+                    new SecurityEventsConsumer(new RekeyUserItems(rekey), new ObjectMapper());
+            Thread rekeyThread = Thread.ofVirtual().name("security-events-consumer")
+                    .start(() -> rekeyEvents.run(bootstrap));
+            rekeyConsumer = rekeyEvents;
+
+            // every loop here is written around an interrupt, and until recently nobody ever
+            // delivered one: the JVM took the daemon threads down mid-poll, KafkaConsumer.close()
+            // never ran and no group was left, so every restart of this service began with
             // ~session.timeout.ms of nobody consuming content-commands — a saga hop delayed for
             // the length of a deploy. The orchestrator has registered this hook all along
-            registerStopHook(purgeThread, cascadeThread);
+            registerStopHook(purgeThread, cascadeThread, rekeyThread);
         }
         PurgeCommandsConsumer watchedConsumer = purgeConsumer;
+        SecurityEventsConsumer watchedRekey = rekeyConsumer;
         Duration consumerStall = requiredConsumerStall("COLLECTIONS_CONSUMER_STALL_SEC",
                 Duration.ofSeconds(stallSeconds("COLLECTIONS_CONSUMER_STALL_SEC",
                         System.getenv().getOrDefault("COLLECTIONS_CONSUMER_STALL_SEC",
@@ -372,10 +394,12 @@ public final class Main {
                             // lives). The compose healthcheck then shows the container as
                             // unhealthy (visibility; a restart would come from an orchestrator
                             // acting on the same probe)
-                            if (watchedConsumer == null || watchedConsumer.healthy(consumerStall)) {
-                                res.send("OK");
-                            } else {
+                            if (watchedConsumer != null && !watchedConsumer.healthy(consumerStall)) {
                                 res.status(503).send("purge consumer stalled");
+                            } else if (watchedRekey != null && !watchedRekey.healthy(consumerStall)) {
+                                res.status(503).send("security events consumer stalled");
+                            } else {
+                                res.send("OK");
                             }
                         })
                         .get("/alive", (req, res) -> {
@@ -385,10 +409,12 @@ public final class Main {
                             // that exited or wedged past COLLECTIONS_ALIVE_STALL_SEC does. The
                             // probe an orchestrator may restart on — /health it should only
                             // route (or alert) on
-                            if (watchedConsumer == null || watchedConsumer.alive(aliveStall)) {
-                                res.send("OK");
-                            } else {
+                            if (watchedConsumer != null && !watchedConsumer.alive(aliveStall)) {
                                 res.status(503).send("purge consumer thread stalled");
+                            } else if (watchedRekey != null && !watchedRekey.alive(aliveStall)) {
+                                res.status(503).send("security events consumer thread stalled");
+                            } else {
+                                res.send("OK");
                             }
                         })
                         .get("/metrics", new MetricsEndpoint(observations)::handle)
