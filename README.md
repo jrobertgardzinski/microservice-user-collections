@@ -31,6 +31,16 @@ Boot/Micronaut/Quarkus siblings), hexagon-lite in a single module (`domain` / `a
   (`ItemReadFilterTest`) fails the suite if any other query names the base table — and the
   `collections_erasure_backlog` gauge alarms when a mark stays unresolved longer than any saga
   can last, because that failure is otherwise silent by construction.
+  The closure destroys what the mark reserved and nothing else, and that leaves one hole this
+  service cannot close alone: the gate here is **offline**, so the leaver's own access token keeps
+  being accepted for up to its `exp` (an hour by default) after the deletion starts, and a save in
+  that window lands ACTIVE — outside the mark, so outside the closure. Such a row is not deleted
+  (the address may since have been taken by somebody else, and a wholesale delete on a redelivered
+  closure would empty *their* list), it is **counted**: `collections_erasure_residue_total` plus a
+  WARN naming the saga, so a reference standing under an erased address can be found and removed by
+  hand. Closing it properly needs a revocation signal from security (or an online check per
+  request) — the reservation itself is safe meanwhile: a reserved row is invisible in every listing
+  and a `DELETE` from that same stale tab reports "not there" rather than destroying it.
 - **microservice-security, the other direction** — a member's address can move, and their saved
   references move with it. Every row here is keyed by the address the token carried
   (`collection_items.user_email`, the JWT's `sub`), so when security confirms a change of address it
@@ -60,11 +70,15 @@ Every command is idempotent by default (workspace ADR 0006, enforced generically
 Path segments wider than the schema's columns are refused with 400 at the edge, never a
 `SQLException` from below.
 
+Every refusal carries the estate's one error shape — `{"status":"CODE"}`, as memes and comments
+answer — so the three different 400s can be told apart: `UNAUTHENTICATED` (401),
+`COLLECTION_TOO_LONG` / `ITEM_TYPE_TOO_LONG` / `ITEM_ID_TOO_LONG` (400), `NOT_SAVED` (404).
+
 Two probes, two questions: `/health` (readiness) turns 503 when the saga consumer stops
 finishing records or the broker stops answering the round-trip probe; `/alive` (liveness) only
 watches that the loop thread still schedules, so a database or broker outage does not get a pod
-restarted for nothing. `/metrics` exposes, among others, the dropped-records counter and the
-erasure backlog gauge.
+restarted for nothing. `/metrics` exposes, among others, the dropped-records counter, the
+erasure backlog gauge and the erasure residue counter.
 
 ## Run & test
 

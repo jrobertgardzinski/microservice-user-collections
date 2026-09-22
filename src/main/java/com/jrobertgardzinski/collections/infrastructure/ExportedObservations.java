@@ -31,6 +31,7 @@ public final class ExportedObservations implements Observations<Observation> {
     private final AtomicLong erasureBacklog = new AtomicLong();
     private final AtomicLong recordsDropped = new AtomicLong();
     private final AtomicLong purgesReservingNothing = new AtomicLong();
+    private final AtomicLong erasureResidue = new AtomicLong();
 
     @Override
     public void record(Observation observation) {
@@ -41,6 +42,10 @@ public final class ExportedObservations implements Observations<Observation> {
             // this service confirmed while holding nothing, and the running total is what an alert
             // can watch rise
             case Observation.PurgeReservedNothing ignored -> purgesReservingNothing.incrementAndGet();
+            // a COUNTER of REFERENCES, not of closures: the number an operator has to act on is
+            // how many rows are standing under erased addresses, and each one stays there until a
+            // human removes it — a gauge would forget the ones from the closure before last
+            case Observation.ErasureResidue residue -> erasureResidue.addAndGet(residue.refs());
         }
     }
 
@@ -57,5 +62,10 @@ public final class ExportedObservations implements Observations<Observation> {
     /** The process-wide count of purge confirmations that reserved not one reference. */
     public long purgesReservingNothing() {
         return purgesReservingNothing.get();
+    }
+
+    /** The process-wide count of references left standing under an address that was erased. */
+    public long erasureResidue() {
+        return erasureResidue.get();
     }
 }

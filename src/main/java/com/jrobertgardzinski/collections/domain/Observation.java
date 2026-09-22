@@ -55,4 +55,18 @@ public sealed interface Observation {
      */
     record PurgeReservedNothing() implements Observation {
     }
+
+    /**
+     * References still standing under the address of somebody this service has just erased: saved
+     * after the mark reserved the rest, so the closure — which may only destroy what was reserved —
+     * had to leave them, and no later command will ever come for them.
+     *
+     * <p>They exist because the gate here is offline: a deletion locks signing IN, while an access
+     * token already in a tab keeps being accepted until it expires. This service cannot refuse that
+     * write, and it cannot safely delete the row afterwards either (the same address may since have
+     * been taken by somebody else), so it does the one thing that is honest alone: it says the row
+     * is there. Nothing else can — the backlog alarm counts MARKS, and this row carries none.
+     */
+    record ErasureResidue(int refs) implements Observation {
+    }
 }

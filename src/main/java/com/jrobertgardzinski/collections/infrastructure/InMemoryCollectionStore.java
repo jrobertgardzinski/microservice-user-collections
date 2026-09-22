@@ -50,12 +50,13 @@ public class InMemoryCollectionStore implements CollectionStore, ItemReferences,
 
     @Override
     public synchronized boolean remove(String user, String collection, ItemRef item) {
-        LinkedHashSet<ItemRef> set = data.get(new Key(user, collection));
-        boolean removed = set != null && set.remove(item);
-        if (removed) {
-            marks.remove(new Row(user, collection, item));
+        // a reserved row is not the owner's to remove, exactly as in the JDBC twin: it is invisible
+        // in every listing, and destroying it would leave a compensation with nothing to restore
+        if (marks.containsKey(new Row(user, collection, item))) {
+            return false;
         }
-        return removed;
+        LinkedHashSet<ItemRef> set = data.get(new Key(user, collection));
+        return set != null && set.remove(item);
     }
 
     @Override

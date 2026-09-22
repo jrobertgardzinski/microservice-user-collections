@@ -25,6 +25,7 @@ import org.slf4j.MDC;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -338,8 +339,18 @@ public class PurgeCommandsConsumer {
         // the saga id identifies the run in logs; the e-mail is PII and stays out of INFO lines
         if (ERASE.equals(type)) {
             // the CLOSURE. Only this destroys anything, and only what the mark reserved
+            PurgeUserItems.Closure closure = purgeUserItems.execute(email);
             LOG.info("erased {} reserved collection refs on the saga's closure (saga {})",
-                    purgeUserItems.execute(email), sagaId);
+                    closure.erased(), sagaId);
+            if (closure.leftBehind() > 0) {
+                observations.record(new Observation.ErasureResidue(closure.leftBehind()));
+                LOG.warn("the closure of saga {} left {} references standing under the address it"
+                        + " erased: they were saved after the mark, by a token this offline gate"
+                        + " still accepted, so no command of this saga may destroy them and none"
+                        + " will ever come. They need removing by hand —"
+                        + " collections_erasure_residue_total is the count", sagaId,
+                        closure.leftBehind());
+            }
             return Optional.empty();
         }
         if (RESTORE.equals(type)) {
@@ -481,11 +492,11 @@ public class PurgeCommandsConsumer {
                             throw handlingFailed;
                         }
                         dropAfterBudget(record, handlingFailed, consumer);
-                        recordBudget.forget();
+                        recordBudget.forget(record);
                     }
                 }
                 consumer.commitSync();
-                recordBudget.forget();   // the batch is done; no record is being retried any more
+                recordBudget.forgetAll();   // the batch is done; no record is being retried any more
                 lastCycleNanos = System.nanoTime();
                 backoffMillis = initialBackoffMillis;   // a full cycle worked: forgive the past
             } catch (InterruptException stopping) {
@@ -569,10 +580,20 @@ public class PurgeCommandsConsumer {
     }
 
     /**
-     * The deadline of the ONE record currently being retried. A record is identified by its
-     * coordinates, so the deadline survives the rewind: the same offset coming back from the broker
-     * continues the clock that its first failure started, instead of being handed a fresh budget on
-     * every redelivery (which is how a bounded budget turns back into an unbounded one).
+     * The deadline of every record currently being retried, one per record. A record is identified
+     * by its coordinates, so its deadline survives the rewind: the same offset coming back from the
+     * broker continues the clock that its first failure started, instead of being handed a fresh
+     * budget on every redelivery (which is how a bounded budget turns back into an unbounded one).
+     *
+     * <p><b>A deadline per record, not one for the whole loop.</b> This used to hold a single key,
+     * and a rewind replays the WHOLE batch: with two records failing in turn — A fails, then A
+     * succeeds and B fails, then A again — each failure found a different record on that one key
+     * and opened it a fresh budget, so neither deadline ever matured and the bound this class is
+     * named after did not apply. The javadoc has promised the per-record deadline all along; the
+     * map is what keeps the promise.
+     *
+     * <p>The map holds at most one batch's worth of coordinates ({@link #MAX_POLL_RECORDS}): a
+     * record that is dropped or committed is forgotten, and a completed cycle clears what is left.
      *
      * <p>{@code System.nanoTime}, never the wall clock: this measures elapsed time, and a wall clock
      * can step (NTP). Backwards it would hand out a budget that never expires; forwards it would cut a
@@ -581,8 +602,7 @@ public class PurgeCommandsConsumer {
     private static final class RecordBudget {
 
         private final Duration budget;
-        private String retrying;
-        private long deadlineNanos;
+        private final Map<String, Long> deadlines = new HashMap<>();
 
         RecordBudget(Duration budget) {
             this.budget = budget;
@@ -594,18 +614,26 @@ public class PurgeCommandsConsumer {
          * attempt — the same shape as comments' {@code SagaRetryBudget.start()}.
          */
         boolean isSpentOn(ConsumerRecord<?, ?> record) {
-            String at = record.topic() + "-" + record.partition() + "@" + record.offset();
-            if (!at.equals(retrying)) {
-                retrying = at;
-                deadlineNanos = System.nanoTime() + budget.toNanos();
+            Long deadlineNanos = deadlines.get(coordinatesOf(record));
+            if (deadlineNanos == null) {
+                deadlines.put(coordinatesOf(record), System.nanoTime() + budget.toNanos());
                 return false;
             }
             return System.nanoTime() - deadlineNanos >= 0;
         }
 
-        /** No record is being retried any more: the next failure opens a fresh budget. */
-        void forget() {
-            retrying = null;
+        /** This record is settled — abandoned, or handled: its next failure starts a fresh budget. */
+        void forget(ConsumerRecord<?, ?> record) {
+            deadlines.remove(coordinatesOf(record));
+        }
+
+        /** The batch committed: nothing in it is being retried any more. */
+        void forgetAll() {
+            deadlines.clear();
+        }
+
+        private static String coordinatesOf(ConsumerRecord<?, ?> record) {
+            return record.topic() + "-" + record.partition() + "@" + record.offset();
         }
     }
 

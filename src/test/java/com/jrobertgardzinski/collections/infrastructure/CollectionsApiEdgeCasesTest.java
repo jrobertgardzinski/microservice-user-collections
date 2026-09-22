@@ -100,6 +100,30 @@ class CollectionsApiEdgeCasesTest {
                 "Bearer " + VALID_TOKEN));
     }
 
+    @Test
+    void every_refusal_names_a_CODE_the_caller_can_branch_on() {
+        // three different mistakes used to answer one bodiless 400: the caller was told the
+        // request was refused and nothing about which segment to look at
+        assertEquals("{\"status\":\"COLLECTION_TOO_LONG\"}",
+                bodyOf("PUT", "/collections/" + "c".repeat(65) + "/items/meme/42"));
+        assertEquals("{\"status\":\"ITEM_TYPE_TOO_LONG\"}",
+                bodyOf("PUT", "/collections/favourites/items/" + "t".repeat(65) + "/42"));
+        assertEquals("{\"status\":\"ITEM_ID_TOO_LONG\"}",
+                bodyOf("PUT", "/collections/favourites/items/meme/" + "x".repeat(129)));
+        assertEquals("{\"status\":\"NOT_SAVED\"}",
+                bodyOf("DELETE", "/collections/favourites/items/meme/never-saved"));
+    }
+
+    @Test
+    void a_refusal_without_a_token_is_readable_too() {
+        // the UI reads every answer as JSON; an empty body throws in the client instead of
+        // telling it what happened
+        assertEquals("{\"status\":\"UNAUTHENTICATED\"}",
+                bodyOf("GET", "/collections/favourites/items", null));
+        assertEquals("application/json",
+                contentTypeOf("GET", "/collections/favourites/items", null));
+    }
+
     private static int statusOf(String method, String path, String authorization) {
         try {
             HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(baseUrl + path))
@@ -108,6 +132,33 @@ class CollectionsApiEdgeCasesTest {
                 request.header("Authorization", authorization);
             }
             return http.send(request.build(), HttpResponse.BodyHandlers.discarding()).statusCode();
+        } catch (Exception e) {
+            throw new IllegalStateException(method + " " + path + " failed", e);
+        }
+    }
+
+    /** The refused answer's body, for the signed-in caller unless the token is left out. */
+    private static String bodyOf(String method, String path) {
+        return bodyOf(method, path, "Bearer " + VALID_TOKEN);
+    }
+
+    private static String bodyOf(String method, String path, String authorization) {
+        return responseTo(method, path, authorization).body();
+    }
+
+    private static String contentTypeOf(String method, String path, String authorization) {
+        return responseTo(method, path, authorization).headers()
+                .firstValue("Content-Type").orElse("");
+    }
+
+    private static HttpResponse<String> responseTo(String method, String path, String authorization) {
+        try {
+            HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(baseUrl + path))
+                    .method(method, HttpRequest.BodyPublishers.noBody());
+            if (authorization != null) {
+                request.header("Authorization", authorization);
+            }
+            return http.send(request.build(), HttpResponse.BodyHandlers.ofString());
         } catch (Exception e) {
             throw new IllegalStateException(method + " " + path + " failed", e);
         }

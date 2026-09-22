@@ -32,13 +32,14 @@ class JdbcCollectionStoreTest {
 
     private JdbcCollectionStore store;
     private JdbcItemErasure erasure;
+    private HikariDataSource dataSource;
 
     @BeforeEach
     void migrateFreshDatabase() {
         HikariConfig config = new HikariConfig();
         config.setJdbcUrl("jdbc:h2:mem:test_" + UUID.randomUUID() + ";MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1");
         config.setUsername("sa");
-        HikariDataSource dataSource = new HikariDataSource(config);
+        dataSource = new HikariDataSource(config);
         Flyway.configure().dataSource(dataSource).load().migrate();
         store = new JdbcCollectionStore(dataSource);
         erasure = new JdbcItemErasure(dataSource);
@@ -112,11 +113,15 @@ class JdbcCollectionStoreTest {
         // saved AFTER the mark: it belongs to no saga, so the closure is not its business
         store.add("alice", "favourites", new ItemRef("meme", "43"));
 
-        assertEquals(1, new PurgeUserItems(erasure).execute("alice"));
+        PurgeUserItems.Closure closure = new PurgeUserItems(erasure).execute("alice");
 
+        assertEquals(1, closure.erased());
         assertEquals(List.of(new ItemRef("meme", "43")), store.list("alice", "favourites"),
                 "the later save survives the closure of a saga that never reserved it");
-        assertEquals(0, new PurgeUserItems(erasure).execute("alice"),
+        assertEquals(1, closure.leftBehind(),
+                "and it is COUNTED: a row standing under an address this service has just erased,"
+                        + " which no command of this saga may destroy and none will come back for");
+        assertEquals(0, new PurgeUserItems(erasure).execute("alice").erased(),
                 "and the closure is idempotent: the second delivery finds nothing reserved");
     }
 
@@ -138,6 +143,54 @@ class JdbcCollectionStoreTest {
                         + " has been owed, and a redelivery must not make an old one look fresh");
         assertEquals(1, erasure.pendingSince(redelivery).size(),
                 "so the reaper's query still finds it overdue");
+    }
+
+    @Test
+    void the_owner_cannot_remove_what_the_saga_reserved() {
+        // the leaver's own tab keeps working for up to an hour after the deletion starts — the
+        // gate here is offline, so a DELETE arrives with a token nobody can take back. It used to
+        // destroy the reserved row outright, and a compensation then had nothing to put back
+        ItemRef meme = new ItemRef("meme", "42");
+        store.add("alice", "favourites", meme);
+        mark().execute("alice");
+
+        assertFalse(store.remove("alice", "favourites", meme),
+                "the row is invisible in every listing, so removing it can only report 'not there'");
+
+        assertEquals(1, new RestoreUserItems(erasure).execute("alice"),
+                "and the compensation still has the reference to give back");
+        assertEquals(List.of(meme), store.list("alice", "favourites"));
+    }
+
+    @Test
+    void the_backlog_alarm_asks_through_an_index_instead_of_scanning_the_table() throws Exception {
+        // the alarm runs once a minute for the life of the process and names no user, so the
+        // index V3 created — user_email first — cannot serve it: its leading column is
+        // unconstrained. What the planner picks is therefore the whole finding
+        for (int i = 0; i < 200; i++) {
+            store.add("member-" + i + "@example.com", "favourites", new ItemRef("meme", "" + i));
+        }
+        mark().execute("member-7@example.com");
+
+        String plan = planOf("SELECT user_email, collection, item_type, item_id, status, "
+                + "marked_for_erasure_at FROM collection_items "
+                + "WHERE status = 'PENDING_ERASURE' AND marked_for_erasure_at < CURRENT_TIMESTAMP");
+
+        assertTrue(plan.contains("idx_collection_items_pending_erasure"),
+                "the backlog query must be served by the (status, marked_for_erasure_at) index — "
+                        + "the planner chose: " + plan);
+    }
+
+    /** H2 spells the index it picked into the plan, which is the only place this question lives. */
+    private String planOf(String query) throws Exception {
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement("EXPLAIN " + query);
+             var rows = statement.executeQuery()) {
+            rows.next();
+            // one line: the plan is what the failure message has to carry, and a multi-line
+            // string is cut off at its first line by every test report there is
+            return rows.getString(1).replaceAll("\\s+", " ");
+        }
     }
 
     private MarkUserItemsForErasure mark() {

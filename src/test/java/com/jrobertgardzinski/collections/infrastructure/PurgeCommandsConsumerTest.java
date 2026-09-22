@@ -120,6 +120,67 @@ class PurgeCommandsConsumerTest {
     }
 
     @Test
+    void a_closure_that_had_to_leave_references_behind_states_how_many() {
+        // the write that slips through an OFFLINE gate: deleting an account locks signing IN,
+        // while the access token already in the leaver's other tab is accepted until it expires —
+        // up to an hour. What it saves lands ACTIVE, outside the mark, so outside everything the
+        // closure is allowed to destroy, and no later command will ever come for it. The service
+        // cannot refuse that write and must not delete the row on its own (the same address may
+        // by then belong to somebody else) — so it says the row is there
+        ExportedObservations observations = new ExportedObservations();
+        PurgeCommandsConsumer participant = new PurgeCommandsConsumer(
+                new MarkUserItemsForErasure(store, java.time.Clock.systemUTC()),
+                new RestoreUserItems(store), new PurgeUserItems(store), mapper, observations);
+        store.add("alice@example.com", "favourites", new ItemRef("meme", "42"));
+        participant.handle(
+                "{\"type\":\"PURGE_USER_CONTENT\",\"email\":\"alice@example.com\",\"sagaId\":\"s-9\"}");
+        store.add("alice@example.com", "favourites", new ItemRef("meme", "43"));
+
+        participant.handle(
+                "{\"type\":\"ERASE_USER_CONTENT\",\"email\":\"alice@example.com\",\"sagaId\":\"s-9\"}");
+
+        assertEquals(1, observations.erasureResidue(),
+                "one reference is standing under an address this service has just erased, and"
+                        + " nothing else in the system can notice it: the backlog alarm counts"
+                        + " MARKS, and this row carries none");
+        assertTrue(new MetricsEndpoint(observations).body()
+                        .contains("collections_erasure_residue_total 1"),
+                "/metrics must carry it, or there is nothing for an alert to bind to");
+        assertTrue(logLines.list.stream().anyMatch(event ->
+                        event.getFormattedMessage().contains("left 1 references")
+                                && event.getFormattedMessage().contains("s-9")),
+                "and the line must name the saga, so the case can be traced");
+        assertFalse(logLines.list.stream().anyMatch(event ->
+                        event.getFormattedMessage().contains("alice@example.com")),
+                "without the address: the residue is about a person being forgotten");
+    }
+
+    @Test
+    void a_closure_with_nothing_left_over_raises_nothing() {
+        ExportedObservations observations = new ExportedObservations();
+        PurgeCommandsConsumer participant = new PurgeCommandsConsumer(
+                new MarkUserItemsForErasure(store, java.time.Clock.systemUTC()),
+                new RestoreUserItems(store), new PurgeUserItems(store), mapper, observations);
+        store.add("alice@example.com", "favourites", new ItemRef("meme", "42"));
+        participant.handle(
+                "{\"type\":\"PURGE_USER_CONTENT\",\"email\":\"alice@example.com\",\"sagaId\":\"s-9\"}");
+
+        participant.handle(
+                "{\"type\":\"ERASE_USER_CONTENT\",\"email\":\"alice@example.com\",\"sagaId\":\"s-9\"}");
+        // the redelivery every saga command must survive — and by now the address may belong to
+        // somebody else, whose list is not a leaver's residue
+        store.add("alice@example.com", "favourites", new ItemRef("meme", "77"));
+        participant.handle(
+                "{\"type\":\"ERASE_USER_CONTENT\",\"email\":\"alice@example.com\",\"sagaId\":\"s-9\"}");
+
+        assertEquals(0, observations.erasureResidue(),
+                "an alarm that goes off for the ordinary deletion, or for a second delivery of the"
+                        + " same closure, is an alarm nobody reads");
+        assertEquals(1, store.list("alice@example.com", "favourites").size(),
+                "and the closure still destroys only what the mark reserved");
+    }
+
+    @Test
     void a_purge_command_without_an_email_is_dropped_without_a_confirmation() {
         store.add("alice@example.com", "favourites", new ItemRef("meme", "42"));
 

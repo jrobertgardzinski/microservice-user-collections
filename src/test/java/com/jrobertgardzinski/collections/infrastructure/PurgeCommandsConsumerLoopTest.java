@@ -66,6 +66,8 @@ class PurgeCommandsConsumerLoopTest {
             new TopicPartition(PurgeCommandsConsumer.COMMANDS_TOPIC, 0);
     private static final String PURGE_ALICE =
             "{\"type\":\"PURGE_USER_CONTENT\",\"email\":\"alice@example.com\",\"sagaId\":\"s-1\"}";
+    private static final String PURGE_BOB =
+            "{\"type\":\"PURGE_USER_CONTENT\",\"email\":\"bob@example.com\",\"sagaId\":\"s-2\"}";
     private static final long TEST_BACKOFF_MILLIS = 5;   // the seam's third argument: retries in
                                                          // milliseconds, not the production second
 
@@ -336,6 +338,55 @@ class PurgeCommandsConsumerLoopTest {
                         .contains("collections_kafka_records_dropped_total{topic=\""
                                 + PurgeCommandsConsumer.COMMANDS_TOPIC + "\"} "),
                 "/metrics must expose the counter, or nobody can alert on it");
+    }
+
+    @Test
+    void a_second_failing_record_in_the_batch_cannot_reset_the_first_ones_budget() throws Exception {
+        // the budget is a promise about ONE record ("the deadline survives the rewind"), and a
+        // rewind replays the WHOLE batch. With the deadline kept on a single key, two records
+        // failing in turn — alice, then bob, then alice — handed each failure a fresh budget,
+        // so neither was ever abandoned and a purge could still land minutes after the
+        // orchestrator had compensated and given the account back.
+        store.add("alice@example.com", "favourites", new ItemRef("meme", "42"));
+        store.add("bob@example.com", "favourites", new ItemRef("meme", "99"));
+        MockProducer<String, String> producer =
+                new MockProducer<>(true, null, new StringSerializer(), new StringSerializer());
+        MockConsumer<String, String> consumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST);
+        AtomicInteger aliceAttempts = new AtomicInteger();
+        ItemErasure flapping = new DelegatingErasure(store) {
+            @Override
+            public List<SavedItem> activeOf(String user) {
+                boolean failing = user.startsWith("bob")
+                        || aliceAttempts.getAndIncrement() % 2 == 0;   // alice fails every other try
+                if (!failing) {
+                    return super.activeOf(user);
+                }
+                // the rewind's redelivery, the MockConsumer way: the whole batch comes back
+                consumer.schedulePollTask(() -> {
+                    consumer.addRecord(command(0, PURGE_ALICE));
+                    consumer.addRecord(command(1, PURGE_BOB));
+                });
+                throw new IllegalStateException("database away for " + user);
+            }
+        };
+        consumer.updateBeginningOffsets(Map.of(PARTITION, 0L));
+        consumer.schedulePollTask(() -> {
+            consumer.rebalance(List.of(PARTITION));
+            consumer.addRecord(command(0, PURGE_ALICE));
+            consumer.addRecord(command(1, PURGE_BOB));
+        });
+        PurgeCommandsConsumer purge =
+                consumerUnderTest(flapping, TEST_BACKOFF_MILLIS, Duration.ofMillis(60));
+
+        startLoop(purge, consumer, producer);
+        await("a record whose budget ran out to be abandoned, though the OTHER record in the"
+                        + " batch kept failing in between", () -> committedOffset(consumer) >= 1);
+
+        assertTrue(aliceAttempts.get() >= 2, "the alternation must really have happened");
+        assertTrue(observations.recordsDropped() >= 1,
+                "a record that has been failing for longer than the whole budget must be dropped"
+                        + " — counting the failures of its neighbour as its own progress is how an"
+                        + " unbounded retry comes back");
     }
 
     @Test

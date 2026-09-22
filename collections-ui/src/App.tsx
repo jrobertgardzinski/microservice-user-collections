@@ -41,7 +41,8 @@ const MEMES = deployed('memesUrl') ?? import.meta.env.VITE_MEMES_URL ?? '';
 // computer one `POST /refresh` handed the next person the previous user's session. The cookie
 // rides along on credentials:'include'; `keepalive` lets the request outlive the click; a network
 // error is swallowed, because signing out locally must never hang on the server. Without the
-// cookie it is an idempotent no-op.
+// cookie it is an idempotent no-op — which is why the sign-in above has to send credentials too:
+// it is what makes the cookie this call sends THIS UI's session and not the gallery's.
 const logout = (): void => {
   void fetch(`${SECURITY}/logout`, { method: 'POST', credentials: 'include', keepalive: true })
     .catch(() => { /* the local sign-out proceeds regardless */ });
@@ -70,6 +71,13 @@ function SignIn({ onSignedIn }: { onSignedIn: (token: string, email: string) => 
       const response = await fetch(`${SECURITY}/authenticate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        // this UI is a different ORIGIN from security (8093 vs 8080), so without
+        // credentials:'include' the browser drops security's Set-Cookie and this UI never holds a
+        // refresh cookie of its own. Sign-OUT sends one anyway — and the only cookie there is to
+        // send is then the gallery's, on the same site (a different port is the same site): the
+        // click revoked the gallery's whole session family and left this one alive server-side.
+        // The two calls have to agree, and they agree on sending the cookie
+        credentials: 'include',
         body: JSON.stringify({ email, password }),
       });
       if (response.status === 200) {

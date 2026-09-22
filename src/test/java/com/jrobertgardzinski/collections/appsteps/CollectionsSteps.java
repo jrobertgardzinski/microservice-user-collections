@@ -38,29 +38,19 @@ public class CollectionsSteps {
 
     private static final String SAGA_ID = "saga-1";
 
-    /** What each user holds right now, kept by the save/remove steps below. */
-    private final java.util.Map<String, Integer> refsHeld = new java.util.HashMap<>();
-
     private SaveItem.Status lastSave;
     private RemoveItem.Status lastRemove;
-    private int lastPurgeCount;
     private Optional<String> lastConfirmation;
 
     @When("^(\\w+) saves (\\w+) (\\d+) into \"([^\"]+)\"$")
     @Given("^(\\w+) has saved (\\w+) (\\d+) into \"([^\"]+)\"$")
     public void saves(String user, String type, String id, String collection) {
         lastSave = saveItem.execute(user, collection, new ItemRef(type, id));
-        if (lastSave == SaveItem.Status.SAVED) {
-            refsHeld.merge(user, 1, Integer::sum);
-        }
     }
 
     @When("^(\\w+) removes (\\w+) (\\d+) from \"([^\"]+)\"$")
     public void removes(String user, String type, String id, String collection) {
         lastRemove = removeItem.execute(user, collection, new ItemRef(type, id));
-        if (lastRemove == RemoveItem.Status.REMOVED) {
-            refsHeld.merge(user, -1, Integer::sum);
-        }
     }
 
     @When("^(\\w+)'s account is purged$")
@@ -72,22 +62,8 @@ public class CollectionsSteps {
         // so the suite proved the refusal of a malformed command and never the acceptance of a good
         // one. Living documentation that overstates its own reach is the failure this review kept
         // finding, and it is worst here, where the docs name the transport.
-        int owned = countRefsOf(user);
         lastConfirmation = purgeConsumer.handle("{\"type\":\"PURGE_USER_CONTENT\",\"email\":\""
                 + user + "\",\"sagaId\":\"" + SAGA_ID + "\"}");
-        refsHeld.put(user, 0);
-        lastPurgeCount = owned;
-    }
-
-    /**
-     * Everything this user holds, tallied by the steps themselves.
-     *
-     * <p>Counted here rather than asked of the store, because the production store exposes no
-     * "every collection of this user" query and adding one purely so a test can count would be the
-     * test dictating the production interface.
-     */
-    private int countRefsOf(String user) {
-        return refsHeld.getOrDefault(user, 0);
     }
 
     @When("^the ORCHESTRATOR compensates the SAGA$")
@@ -148,8 +124,17 @@ public class CollectionsSteps {
     }
 
     @Then("^(\\d+) REFERENCES were reserved$")
-    public void referencesRemoved(int count) {
-        assertEquals(count, lastPurgeCount);
+    public void referencesRemoved(int count) throws Exception {
+        // the number the MARK put on the wire, not one the steps kept for themselves. This used to
+        // compare the Feature's figure against a tally the save and remove steps maintained, so it
+        // passed for whatever the mark had really reserved — zero included — and observed nothing
+        // the production code does. The confirmation is where that count is stated, and the
+        // orchestrator reads the same field
+        String confirmation = lastConfirmation.orElseThrow(
+                () -> new AssertionError("nothing was confirmed, so nothing said what was reserved"));
+        assertEquals(count, new ObjectMapper().readTree(confirmation).path("reserved").asInt(),
+                "the participant tells the orchestrator how many references it took out of the"
+                        + " member's lists, and that is the number this Feature names");
     }
 
     @Then("^(\\w+)'s \"([^\"]+)\" contains (\\w+) (\\d+)$")

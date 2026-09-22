@@ -16,3 +16,15 @@ Tylko otwarte rzeczy. Historia = git log.
     (zapisane w `../k8s/README.md` jako dług przyszłego overlaya observability).
   - (opc.) wątek `erasure-backlog-watch` chodzi tylko, gdy jest broker; przy zmianie tej reguły
     pamiętać, że bez brokera nie ma sagi, więc nie ma czego pilnować.
+
+- **Zapis po starcie kasowania — dziura estate'owa, ZWĘŻONA i WIDOCZNA, nie zamknięta.** Bramka
+  tutaj jest offline, więc token odchodzącego jest przyjmowany aż do własnego `exp` (domyślnie
+  godzina) po `POST /account/delete`. Zrobione po stronie tego serwisu: (1) `DELETE` nie rusza
+  wiersza zarezerwowanego przez sagę — kasowanie z nieświeżej karty nie odbierze kompensacji
+  czego przywrócić; (2) zamknięcie liczy, ile referencji musiało zostawić pod adresem, który
+  własnie wymazało — `collections_erasure_residue_total` + WARN z sagą (nie kasuje ich: ten sam
+  adres mógł już wziąć ktoś inny, a hurtowe kasowanie przy ponownym doręczeniu zamknięcia
+  wyczyściłoby JEGO listę). **Zostaje**: zapis PO zamknięciu, w resztce ważności tokenu, nie ma
+  kto zobaczyć — potrzebny sygnał unieważnienia z security (np. na `security-events`, obok
+  `EMAIL_CHANGED`) albo pytanie o token per żądanie. To samo dotyczy memes i comments —
+  decyzja estate'owa, nie tego repo.

@@ -3,6 +3,7 @@ package com.jrobertgardzinski.collections.infrastructure;
 import com.jrobertgardzinski.collections.application.CollectionStore;
 import com.jrobertgardzinski.collections.application.ItemReferences;
 import com.jrobertgardzinski.collections.domain.ItemRef;
+import com.jrobertgardzinski.collections.domain.ItemStatus;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
@@ -72,14 +73,20 @@ public class JdbcCollectionStore implements CollectionStore, ItemReferences {
 
     @Override
     public boolean remove(String user, String collection, ItemRef item) {
+        // the owner may only remove what the owner can SEE, which is why the status is part of the
+        // key here. A reserved row is invisible in every listing, yet this DELETE used to destroy
+        // it outright: a tab still showing yesterday's list (the access token stays valid for up to
+        // an hour after the deletion starts — the gate here is offline) could delete a row the saga
+        // had set aside, and a RESTORE that arrived afterwards had nothing left to put back
         try (Connection c = dataSource.getConnection();
              PreparedStatement ps = c.prepareStatement(
                      "DELETE FROM collection_items WHERE user_email = ? AND collection = ? "
-                             + "AND item_type = ? AND item_id = ?")) {
+                             + "AND item_type = ? AND item_id = ? AND status = ?")) {
             ps.setString(1, user);
             ps.setString(2, collection);
             ps.setString(3, item.itemType());
             ps.setString(4, item.itemId());
+            ps.setString(5, ItemStatus.ACTIVE.name());
             return ps.executeUpdate() > 0;
         } catch (SQLException e) {
             throw new IllegalStateException("could not remove item", e);

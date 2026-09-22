@@ -45,6 +45,19 @@ Feature: What a leaver's saved lists are owed
       And alice's "watchlist" contains comment 7
       And no CONFIRMATION goes back to the ORCHESTRATOR
 
+  Rule: What is set aside is not its owner's to remove either
+
+    # The leaver's own screen goes on working for as long as the pass in their pocket is valid —
+    # this service checks the signature, not a list of the passes that have been taken back — so a
+    # tile they click after the decision was taken must not be able to destroy what was set aside.
+    Example:
+      Given alice has saved meme 42 into "favourites"
+      And alice's account is purged
+      When alice removes meme 42 from "favourites"
+      Then the removal reports it was not there
+      And the ORCHESTRATOR compensates the SAGA
+      And alice's "favourites" contains meme 42
+
   Rule: Once it is final, nothing comes back
 
     Example:

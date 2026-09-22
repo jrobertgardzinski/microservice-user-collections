@@ -59,6 +59,11 @@ final class MetricsEndpoint {
                 // deletion rate is the address-change defect coming back
                 + "# TYPE collections_saga_purge_reserved_nothing_total counter\n"
                 + "collections_saga_purge_reserved_nothing_total "
-                + observations.purgesReservingNothing() + "\n";
+                + observations.purgesReservingNothing() + "\n"
+                // the third GDPR line: rows a closure had to leave under an address it erased,
+                // because they were saved after the mark by a token the offline gate still
+                // accepted. Nothing will ever come back for them, so this only ever rises
+                + "# TYPE collections_erasure_residue_total counter\n"
+                + "collections_erasure_residue_total " + observations.erasureResidue() + "\n";
     }
 }

@@ -26,6 +26,12 @@ import java.util.Optional;
  *   <li>{@code PUT  /collections/{collection}/items/{itemType}/{itemId}} — save (201 new, 200 already)</li>
  *   <li>{@code DELETE /collections/{collection}/items/{itemType}/{itemId}} — remove (204 gone, 404 absent)</li>
  * </ul>
+ *
+ * <p>Every refusal carries a body, and always the same shape: {@code {"status":"CODE"}}, the one
+ * memes and comments answer with. A bare status told a caller a request was refused and nothing
+ * about which of three different things was wrong with it — an over-long collection, item type and
+ * item id all answered 400 with zero bytes, and a client parsing the answer got a JSON error
+ * instead of a reason.
  */
 public class CollectionsApi implements HttpService {
 
@@ -58,11 +64,12 @@ public class CollectionsApi implements HttpService {
     private void save(ServerRequest req, ServerResponse res) {
         Optional<String> user = authenticate(req);
         if (user.isEmpty()) {
-            res.status(Status.UNAUTHORIZED_401).send();
+            refuse(res, Status.UNAUTHORIZED_401, "UNAUTHENTICATED");
             return;
         }
-        if (!fitsItemPath(req)) {
-            res.status(Status.BAD_REQUEST_400).send();
+        String tooLong = tooLongSegmentOf(req);
+        if (tooLong != null) {
+            refuse(res, Status.BAD_REQUEST_400, tooLong);
             return;
         }
         SaveItem.Status status = saveItem.execute(user.get(),
@@ -73,26 +80,31 @@ public class CollectionsApi implements HttpService {
     private void remove(ServerRequest req, ServerResponse res) {
         Optional<String> user = authenticate(req);
         if (user.isEmpty()) {
-            res.status(Status.UNAUTHORIZED_401).send();
+            refuse(res, Status.UNAUTHORIZED_401, "UNAUTHENTICATED");
             return;
         }
-        if (!fitsItemPath(req)) {
-            res.status(Status.BAD_REQUEST_400).send();
+        String tooLong = tooLongSegmentOf(req);
+        if (tooLong != null) {
+            refuse(res, Status.BAD_REQUEST_400, tooLong);
             return;
         }
         RemoveItem.Status status = removeItem.execute(user.get(),
                 req.path().pathParameters().get("collection"), itemOf(req));
-        res.status(status == RemoveItem.Status.REMOVED ? Status.NO_CONTENT_204 : Status.NOT_FOUND_404).send();
+        if (status == RemoveItem.Status.REMOVED) {
+            res.status(Status.NO_CONTENT_204).send();
+        } else {
+            refuse(res, Status.NOT_FOUND_404, "NOT_SAVED");
+        }
     }
 
     private void list(ServerRequest req, ServerResponse res) {
         Optional<String> user = authenticate(req);
         if (user.isEmpty()) {
-            res.status(Status.UNAUTHORIZED_401).send();
+            refuse(res, Status.UNAUTHORIZED_401, "UNAUTHENTICATED");
             return;
         }
         if (!fitsCollection(req)) {
-            res.status(Status.BAD_REQUEST_400).send();
+            refuse(res, Status.BAD_REQUEST_400, "COLLECTION_TOO_LONG");
             return;
         }
         ArrayNode array = mapper.createArrayNode();
@@ -103,18 +115,40 @@ public class CollectionsApi implements HttpService {
             res.header(HeaderNames.CONTENT_TYPE, "application/json")
                     .send(mapper.writeValueAsString(array));
         } catch (Exception unserialisable) {
-            res.status(Status.INTERNAL_SERVER_ERROR_500).send();
+            refuse(res, Status.INTERNAL_SERVER_ERROR_500, "LIST_UNREADABLE");
         }
+    }
+
+    /**
+     * The one error shape, spelled by hand: every code below is a literal of this class, so there
+     * is nothing here a caller could get into the body.
+     */
+    private static void refuse(ServerResponse res, Status status, String code) {
+        res.status(status)
+                .header(HeaderNames.CONTENT_TYPE, "application/json")
+                .send("{\"status\":\"" + code + "\"}");
     }
 
     private static boolean fitsCollection(ServerRequest req) {
         return req.path().pathParameters().get("collection").length() <= MAX_COLLECTION_LENGTH;
     }
 
-    private static boolean fitsItemPath(ServerRequest req) {
-        return fitsCollection(req)
-                && req.path().pathParameters().get("itemType").length() <= MAX_ITEM_TYPE_LENGTH
-                && req.path().pathParameters().get("itemId").length() <= MAX_ITEM_ID_LENGTH;
+    /**
+     * Which segment of the item path is wider than its column, as the code the caller is given —
+     * null when they all fit. Three causes that used to share one bodiless 400, so a client could
+     * tell a mistyped collection from a pasted URL only by measuring the path itself.
+     */
+    private static String tooLongSegmentOf(ServerRequest req) {
+        if (!fitsCollection(req)) {
+            return "COLLECTION_TOO_LONG";
+        }
+        if (req.path().pathParameters().get("itemType").length() > MAX_ITEM_TYPE_LENGTH) {
+            return "ITEM_TYPE_TOO_LONG";
+        }
+        if (req.path().pathParameters().get("itemId").length() > MAX_ITEM_ID_LENGTH) {
+            return "ITEM_ID_TOO_LONG";
+        }
+        return null;
     }
 
     private static ItemRef itemOf(ServerRequest req) {
