@@ -1,0 +1,268 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.jrobertgardzinski</groupId>
+        <artifactId>microservice-user-collections</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+    <artifactId>collections-infrastructure</artifactId>
+
+    <!-- Everything with the outside in it: the Helidon WebServer, JDBC and Flyway, the Kafka
+         consumers, the probes, the gate, and main(). The only module that produces something you
+         can run: a jar whose manifest names the entry point and points its Class-Path at libs/
+         next to it, which is what the Dockerfile copies. -->
+    <properties>
+        <mainClass>com.jrobertgardzinski.collections.infrastructure.Main</mainClass>
+        <finalName>collections-infrastructure</finalName>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.jrobertgardzinski</groupId>
+            <artifactId>collections-application</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.jrobertgardzinski</groupId>
+            <artifactId>collections-domain</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.jrobertgardzinski</groupId>
+            <artifactId>collections-config</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>io.helidon.webserver</groupId>
+            <artifactId>helidon-webserver</artifactId>
+        </dependency>
+        <!-- opaque-ref bodies are plain JSON, parsed by hand with Jackson (no media registration) -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+        <!-- log through SLF4J/Logback so the correlation id rides every line via MDC (%X{cid}),
+             matching the other services; Helidon's own logs route here too -->
+        <dependency>
+            <groupId>io.helidon.logging</groupId>
+            <artifactId>helidon-logging-slf4j</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
+            <version>1.6.1</version>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+        </dependency>
+
+        <!-- persistence: a connection pool, Flyway migrations, Postgres in prod, H2 (PG mode) for
+             dev and tests — the same JDBC adapter runs against both -->
+        <dependency>
+            <groupId>com.zaxxer</groupId>
+            <artifactId>HikariCP</artifactId>
+            <version>5.1.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+            <version>13.1.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+            <version>13.1.0</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <version>42.7.13</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <version>2.4.240</version>
+        </dependency>
+
+        <!-- account-deletion saga: consume PURGE_USER_CONTENT, confirm on usercollections-events -->
+        <dependency>
+            <groupId>org.apache.kafka</groupId>
+            <artifactId>kafka-clients</artifactId>
+            <version>4.3.1</version>
+        </dependency>
+
+        <!-- the shared offline verification of security's access tokens (was a local copy;
+             the five twins converged into the library) -->
+        <dependency>
+            <groupId>com.jrobertgardzinski</groupId>
+            <artifactId>offline-jwt</artifactId>
+            <version>1.0.0-SNAPSHOT</version>
+        </dependency>
+        <dependency>
+            <!-- the port a service states its own facts through; the facts themselves stay ours -->
+            <groupId>com.jrobertgardzinski</groupId>
+            <artifactId>observation</artifactId>
+            <version>1.0.0-SNAPSHOT</version>
+        </dependency>
+        <dependency>
+            <!-- the words this service shares with identity and the orchestrator when an account
+                 closes: the command names and the confirmation's -->
+            <groupId>com.jrobertgardzinski</groupId>
+            <artifactId>account-closure</artifactId>
+            <version>1.0.0-SNAPSHOT</version>
+        </dependency>
+
+        <dependency>
+            <groupId>io.helidon.webserver.testing.junit5</groupId>
+            <artifactId>helidon-webserver-testing-junit5</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.hamcrest</groupId>
+            <artifactId>hamcrest-all</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- test results feed the workspace-wide Allure aggregate (aggregate_allure.py) -->
+        <dependency>
+            <groupId>io.qameta.allure</groupId>
+            <artifactId>allure-junit5</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.qameta.allure</groupId>
+            <artifactId>allure-cucumber7-jvm</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- spec-first: Gherkin scenarios drive the use cases (application-layer entry point) -->
+        <dependency>
+            <groupId>io.cucumber</groupId>
+            <artifactId>cucumber-java</artifactId>
+            <version>${cucumber.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.cucumber</groupId>
+            <artifactId>cucumber-junit-platform-engine</artifactId>
+            <version>${cucumber.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.platform</groupId>
+            <artifactId>junit-platform-suite</artifactId>
+            <version>${junit-suite.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- consumer-driven contract: the pact test states which saga commands this service
+             understands; the generated pact (pacts/, committed) is verified against the REAL
+             producer code by microservice-security's provider tests -->
+        <dependency>
+            <groupId>au.com.dius.pact.consumer</groupId>
+            <artifactId>junit5</artifactId>
+            <version>${pact.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <!-- the provider's half of the saga-confirmation contract: verifies security's
+                 committed pact against the REAL confirmation-building code; skipped gracefully
+                 when the consumer repo is not checked out next to this one -->
+            <groupId>au.com.dius.pact.provider</groupId>
+            <artifactId>junit5</artifactId>
+            <version>${pact.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <finalName>${finalName}</finalName>
+        <plugins>
+            <!-- the runnable artifact, in two halves. Both used to come from Helidon's `helidon-se`
+                 parent; they are declared HERE and nowhere else, because a library module that
+                 stamped a Main-Class into its jar and copied a runtime classpath next to it would
+                 be claiming to be a service. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <configuration>
+                    <archive>
+                        <manifest>
+                            <addClasspath>true</addClasspath>
+                            <classpathPrefix>libs</classpathPrefix>
+                            <mainClass>${mainClass}</mainClass>
+                            <useUniqueVersions>false</useUniqueVersions>
+                        </manifest>
+                    </archive>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>copy-libs</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>copy-dependencies</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}/libs</outputDirectory>
+                            <overWriteReleases>false</overWriteReleases>
+                            <overWriteSnapshots>true</overWriteSnapshots>
+                            <overWriteIfNewer>true</overWriteIfNewer>
+                            <includeScope>runtime</includeScope>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <!-- the specs/ dir at the microservice root (one Gherkin file per use case — the
+                 entry point into this service) goes onto this module's test classpath instead of
+                 copying the files around; microservice-security's convention -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>build-helper-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>add-specs</id>
+                        <phase>generate-test-resources</phase>
+                        <goals>
+                            <goal>add-test-resource</goal>
+                        </goals>
+                        <configuration>
+                            <resources>
+                                <resource>
+                                    <directory>${project.basedir}/../specs</directory>
+                                    <includes>
+                                        <include>**/*.feature</include>
+                                    </includes>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <systemPropertyVariables>
+                        <allure.results.directory>${project.build.directory}/allure-results</allure.results.directory>
+                        <!-- the contract test writes the pact to the repo root (committed, not
+                             target/) so the producer's provider tests verify it from a sibling
+                             checkout -->
+                        <pact.rootDir>${project.basedir}/../pacts</pact.rootDir>
+                        <pact_do_not_track>true</pact_do_not_track>
+                    </systemPropertyVariables>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

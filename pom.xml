@@ -4,35 +4,67 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <!-- The sixth flavour: Helidon 4 SE on virtual threads (Loom). An imperative, blocking
-         WebServer — so the correlation id, JDBC and Kafka stay simple, unlike a reactive stack —
-         yet it scales on virtual threads. Own parent (Helidon's) keeps it buildable standalone. -->
-    <parent>
-        <groupId>io.helidon.applications</groupId>
-        <artifactId>helidon-se</artifactId>
-        <version>4.5.1</version>
-        <relativePath/>
-    </parent>
-
     <groupId>com.jrobertgardzinski</groupId>
     <artifactId>microservice-user-collections</artifactId>
     <version>1.0.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
 
+    <!--
+      The sixth flavour: Helidon 4 SE on virtual threads (Loom). An imperative, blocking
+      WebServer — so the correlation id, JDBC and Kafka stay simple, unlike a reactive stack —
+      yet it scales on virtual threads.
+
+      The estate's layers, as Maven modules rather than packages (2026-09-24), the same cut
+      comments and memes got. Packages were a convention; modules are a CLASSPATH. The names are
+      the estate's own, because an assembly that puts several services in one process picks the
+      layers by name — a service that called its layers something else would not slot in.
+
+        collections-domain         — the words a saved reference is made of. Pure JDK
+        collections-config         — the typed dials. Pure JDK
+        collections-application    — the use cases and the ports they speak through.
+                                     Framework-free: no Helidon, no JDBC, no Kafka
+        collections-infrastructure — everything with the outside in it: the WebServer, JDBC,
+                                     Flyway, Kafka, the probes and main(). THE ONLY MODULE THAT
+                                     PRODUCES A RUNNABLE ARTIFACT
+
+      Helidon's `helidon-se` parent is gone and its BOM is imported instead. A parent applies to
+      every module that inherits it, and its maven-jar-plugin config stamps Main-Class and a
+      libs/ Class-Path into whatever jar it builds — true for the one module with a main(), wrong
+      for the three libraries. What that parent gave us that we still want is stated below:
+      managed versions (the import) and the two plugins that assemble the runnable jar, declared
+      in collections-infrastructure and nowhere else.
+    -->
     <properties>
-        <mainClass>com.jrobertgardzinski.collections.infrastructure.Main</mainClass>
+        <maven.compiler.release>25</maven.compiler.release>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <helidon.version>4.5.1</helidon.version>
         <cucumber.version>7.34.6</cucumber.version>
         <junit-suite.version>6.1.2</junit-suite.version>
         <allure.version>2.35.4</allure.version>
+        <pact.version>4.7.3</pact.version>
+        <!-- pinned here because there is no framework parent to pin them any more -->
+        <compiler-plugin.version>3.15.0</compiler-plugin.version>
+        <surefire-plugin.version>3.5.6</surefire-plugin.version>
+        <jar-plugin.version>3.4.2</jar-plugin.version>
+        <dependency-plugin.version>3.8.1</dependency-plugin.version>
     </properties>
+
+    <modules>
+        <module>collections-domain</module>
+        <module>collections-config</module>
+        <module>collections-application</module>
+        <module>collections-infrastructure</module>
+    </modules>
 
     <dependencyManagement>
         <dependencies>
-            <!-- FIRST in dependencyManagement, and that order is the point: the Helidon parent
-                 pins the JUnit Platform at 1.12.2, while cucumber 7.34 is built against JUnit BOM
-                 5.14.2 (platform 1.14.x) and its engine simply fails to discover anything on the
-                 older one — reporting "TestEngine with ID 'cucumber' failed to discover tests"
-                 with no stack trace at all. The version is cucumber's own declared target, read
-                 from its pom, not guessed. -->
+            <!-- FIRST, and that order is the point: the first declaration wins, and Helidon's BOM
+                 (imported last, below) pins the JUnit Platform at 1.12.x, while cucumber 7.34 is
+                 built against JUnit BOM 5.14.2 (platform 1.14.x) and its engine simply fails to
+                 discover anything on the older one — reporting "TestEngine with ID 'cucumber'
+                 failed to discover tests" with no stack trace at all. The version is cucumber's
+                 own declared target, read from its pom, not guessed. This used to be won by being
+                 in the project while Helidon's was in a parent; now it is won by being first. -->
             <dependency>
                 <groupId>org.junit</groupId>
                 <artifactId>junit-bom</artifactId>
@@ -47,211 +79,71 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+            <!-- this service's own layers: one version, the reactor's -->
+            <dependency>
+                <groupId>com.jrobertgardzinski</groupId>
+                <artifactId>collections-domain</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.jrobertgardzinski</groupId>
+                <artifactId>collections-config</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.jrobertgardzinski</groupId>
+                <artifactId>collections-application</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <!-- LAST: everything Helidon and its third-party stack manage — the WebServer,
+                 Jackson, SLF4J, hamcrest. It loses to the two BOMs above wherever they overlap. -->
+            <dependency>
+                <groupId>io.helidon</groupId>
+                <artifactId>helidon-dependencies</artifactId>
+                <version>${helidon.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
-    <dependencies>
-        <dependency>
-            <groupId>io.helidon.webserver</groupId>
-            <artifactId>helidon-webserver</artifactId>
-        </dependency>
-        <!-- opaque-ref bodies are plain JSON, parsed by hand with Jackson (no media registration) -->
-        <dependency>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-databind</artifactId>
-        </dependency>
-        <!-- log through SLF4J/Logback so the correlation id rides every line via MDC (%X{cid}),
-             matching the other services; Helidon's own logs route here too -->
-        <dependency>
-            <groupId>io.helidon.logging</groupId>
-            <artifactId>helidon-logging-slf4j</artifactId>
-            <scope>runtime</scope>
-        </dependency>
-        <dependency>
-            <groupId>ch.qos.logback</groupId>
-            <artifactId>logback-classic</artifactId>
-            <version>1.6.1</version>
-        </dependency>
-        <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-api</artifactId>
-        </dependency>
-
-        <!-- persistence: a connection pool, Flyway migrations, Postgres in prod, H2 (PG mode) for
-             dev and tests — the same JDBC adapter runs against both -->
-        <dependency>
-            <groupId>com.zaxxer</groupId>
-            <artifactId>HikariCP</artifactId>
-            <version>5.1.0</version>
-        </dependency>
-        <dependency>
-            <groupId>org.flywaydb</groupId>
-            <artifactId>flyway-core</artifactId>
-            <version>13.1.0</version>
-        </dependency>
-        <dependency>
-            <groupId>org.flywaydb</groupId>
-            <artifactId>flyway-database-postgresql</artifactId>
-            <version>13.1.0</version>
-            <scope>runtime</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.postgresql</groupId>
-            <artifactId>postgresql</artifactId>
-            <version>42.7.13</version>
-            <scope>runtime</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.h2database</groupId>
-            <artifactId>h2</artifactId>
-            <version>2.4.240</version>
-        </dependency>
-
-        <!-- account-deletion saga: consume PURGE_USER_CONTENT, confirm on usercollections-events -->
-        <dependency>
-            <groupId>org.apache.kafka</groupId>
-            <artifactId>kafka-clients</artifactId>
-            <version>4.3.1</version>
-        </dependency>
-
-        <dependency>
-            <groupId>io.helidon.webserver.testing.junit5</groupId>
-            <artifactId>helidon-webserver-testing-junit5</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter-api</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.hamcrest</groupId>
-            <artifactId>hamcrest-all</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <!-- test results feed the workspace-wide Allure aggregate (aggregate_allure.py) -->
-        <dependency>
-            <groupId>io.qameta.allure</groupId>
-            <artifactId>allure-junit5</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>io.qameta.allure</groupId>
-            <artifactId>allure-cucumber7-jvm</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <!-- spec-first: Gherkin scenarios drive the use cases (application-layer entry point) -->
-        <dependency>
-            <groupId>io.cucumber</groupId>
-            <artifactId>cucumber-java</artifactId>
-            <version>${cucumber.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>io.cucumber</groupId>
-            <artifactId>cucumber-junit-platform-engine</artifactId>
-            <version>${cucumber.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.junit.platform</groupId>
-            <artifactId>junit-platform-suite</artifactId>
-            <version>${junit-suite.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <!-- the shared offline verification of security's access tokens (was a local copy;
-             the five twins converged into the library) -->
-        <dependency>
-            <groupId>com.jrobertgardzinski</groupId>
-            <artifactId>offline-jwt</artifactId>
-            <version>1.0.0-SNAPSHOT</version>
-        </dependency>
-        <dependency>
-            <!-- the port a service states its own facts through; the facts themselves stay ours -->
-            <groupId>com.jrobertgardzinski</groupId>
-            <artifactId>observation</artifactId>
-            <version>1.0.0-SNAPSHOT</version>
-        </dependency>
-        <dependency>
-            <!-- the words this service shares with identity and the orchestrator when an account
-                 closes: the command names and the confirmation's -->
-            <groupId>com.jrobertgardzinski</groupId>
-            <artifactId>account-closure</artifactId>
-            <version>1.0.0-SNAPSHOT</version>
-        </dependency>
-        <!-- consumer-driven contract: the pact test states which saga commands this service
-             understands; the generated pact (pacts/, committed) is verified against the REAL
-             producer code by microservice-security's provider tests -->
-        <dependency>
-            <groupId>au.com.dius.pact.consumer</groupId>
-            <artifactId>junit5</artifactId>
-            <version>4.7.3</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <!-- the provider's half of the saga-confirmation contract: verifies security's
-                 committed pact against the REAL confirmation-building code; skipped gracefully
-                 when the consumer repo is not checked out next to this one -->
-            <groupId>au.com.dius.pact.provider</groupId>
-            <artifactId>junit5</artifactId>
-            <version>4.7.3</version>
-            <scope>test</scope>
-        </dependency>
-    </dependencies>
-
     <build>
-        <finalName>${project.artifactId}</finalName>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>${compiler-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>${surefire-plugin.version}</version>
+                    <configuration>
+                        <systemPropertyVariables>
+                            <!-- Allure results under target/ so mvn clean removes them -->
+                            <allure.results.directory>${project.build.directory}/allure-results</allure.results.directory>
+                        </systemPropertyVariables>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-jar-plugin</artifactId>
+                    <version>${jar-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-dependency-plugin</artifactId>
+                    <version>${dependency-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.codehaus.mojo</groupId>
+                    <artifactId>build-helper-maven-plugin</artifactId>
+                    <version>3.6.1</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
         <plugins>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-dependency-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <id>copy-libs</id>
-                    </execution>
-                </executions>
-            </plugin>
-            <!-- the top-level specs/ dir (one Gherkin file per use case — the entry point into
-                 this service) goes onto the test classpath instead of copying the files around;
-                 microservice-security's convention -->
-            <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>build-helper-maven-plugin</artifactId>
-                <version>3.6.1</version>
-                <executions>
-                    <execution>
-                        <id>add-specs</id>
-                        <phase>generate-test-resources</phase>
-                        <goals>
-                            <goal>add-test-resource</goal>
-                        </goals>
-                        <configuration>
-                            <resources>
-                                <resource>
-                                    <directory>${project.basedir}/specs</directory>
-                                    <includes>
-                                        <include>**/*.feature</include>
-                                    </includes>
-                                </resource>
-                            </resources>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-surefire-plugin</artifactId>
-                <configuration>
-                    <systemPropertyVariables>
-                        <!-- Allure results under target/ so mvn clean removes them -->
-                        <allure.results.directory>${project.build.directory}/allure-results</allure.results.directory>
-                        <!-- the contract test writes the pact here (committed, not target/) so the
-                             producer's provider tests verify it from a sibling checkout -->
-                        <pact.rootDir>${project.basedir}/pacts</pact.rootDir>
-                        <pact_do_not_track>true</pact_do_not_track>
-                    </systemPropertyVariables>
-                </configuration>
-            </plugin>
             <!-- allure reports everywhere -->
             <plugin>
                 <groupId>io.qameta.allure</groupId>

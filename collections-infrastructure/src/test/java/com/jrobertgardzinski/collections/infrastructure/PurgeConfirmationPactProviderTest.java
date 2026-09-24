@@ -28,19 +28,22 @@ import java.util.List;
  * The saga contract's other direction, provider side: microservice-offboarding's committed pact
  * states which USER_CONTENT_PURGED fields its orchestrator reads; this test proves the REAL
  * handler — pure and broker-free, its confirmation is simply its return value — emits that shape.
- * Skipped, not failed, when the consumer repo is not checked out next to this one.
+ * Skipped, not failed, when the consumer repo is not checked out next to this one — which is why
+ * the path below climbs TWO levels: this module sits inside the microservice since the layers
+ * became Maven modules (2026-09-24), and a path that stops one level short does not fail here, it
+ * disables the test.
  */
 @Epic("Contract")
 @Feature("Account-deletion saga")
 @Story("Confirmation emitted")
 @Provider("microservice-user-collections")
-@PactFolder("../microservice-offboarding/pacts")
+@PactFolder("../../microservice-offboarding/pacts")
 @EnabledIf(value = "consumerPactsCheckedOut",
         disabledReason = "microservice-offboarding is not checked out next to this repo")
 class PurgeConfirmationPactProviderTest {
 
     static boolean consumerPactsCheckedOut() {
-        return Files.isDirectory(Path.of("../microservice-offboarding/pacts"));
+        return Files.isDirectory(Path.of("../../microservice-offboarding/pacts"));
     }
 
     @BeforeEach

@@ -70,7 +70,7 @@ jobs:
           # the profile is DECLARED, because the guard refuses a start nobody decided — this smoke
           # is a deployment like any other, and it started failing here the moment the guard landed
           COLLECTIONS_PROFILE=dev COLLECTIONS_PORT=18092 \
-            java -jar target/microservice-user-collections.jar > /tmp/boot-smoke.log 2>&1 &
+            java -jar collections-infrastructure/target/collections-infrastructure.jar > /tmp/boot-smoke.log 2>&1 &
           pid=$!
           for attempt in $(seq 1 60); do
             curl -s -o /dev/null http://localhost:18092/alive && break

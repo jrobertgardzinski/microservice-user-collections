@@ -4,8 +4,15 @@ A user's saved references — memes, comments — kept in named collections ("fa
 "watchlist"). The references are **opaque**: an `(itemType, itemId)` pair the service stores and
 returns but never interprets, which is what keeps it out of every other service's business.
 Helidon SE (imperative, blocking, scaling on Loom — a deliberately different flavour from the
-Boot/Micronaut/Quarkus siblings), hexagon-lite in a single module (`domain` / `application` /
-`infrastructure` packages), Postgres + Flyway (H2 in PostgreSQL mode for dev and tests).
+Boot/Micronaut/Quarkus siblings), the estate's four layers as four Maven modules
+(`collections-domain` / `collections-config` / `collections-application` /
+`collections-infrastructure`), Postgres + Flyway (H2 in PostgreSQL mode for dev and tests).
+
+The layers are modules rather than packages because a package boundary is a convention and a
+module boundary is a classpath: `collections-application` compiles without Helidon, JDBC or Kafka
+on it, and `collections-infrastructure` is the only module that produces something you can run —
+`collections-infrastructure/target/collections-infrastructure.jar` plus the `libs/` its manifest
+points at.
 
 ## Who it talks to
 

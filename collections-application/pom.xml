@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.jrobertgardzinski</groupId>
+        <artifactId>microservice-user-collections</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+    <artifactId>collections-application</artifactId>
+
+    <!-- The use cases and the ports they speak through. Framework-free on purpose: nothing here
+         knows Helidon, JDBC or Kafka, which is what lets another process wire these same use
+         cases to different adapters. The whole list of what it is allowed to know is below. -->
+    <dependencies>
+        <dependency>
+            <groupId>com.jrobertgardzinski</groupId>
+            <artifactId>collections-domain</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.jrobertgardzinski</groupId>
+            <artifactId>collections-config</artifactId>
+        </dependency>
+        <dependency>
+            <!-- the port a service states its own facts through; the facts themselves stay ours -->
+            <groupId>com.jrobertgardzinski</groupId>
+            <artifactId>observation</artifactId>
+            <version>1.0.0-SNAPSHOT</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+</project>

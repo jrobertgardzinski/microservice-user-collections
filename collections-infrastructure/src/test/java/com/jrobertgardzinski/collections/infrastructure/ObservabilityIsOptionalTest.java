@@ -44,11 +44,16 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 @Feature("Observability is a layer, not a dependency")
 class ObservabilityIsOptionalTest {
 
-    /** The layers that must not name a tool — everything except the adapters. */
+    /**
+     * The layers that must not name a tool — everything except the adapters. Sibling modules
+     * since the layers became Maven modules (2026-09-24), which is why the paths climb out of
+     * this one. {@link Files#walk} throws on a missing directory, so a path that rots here fails
+     * the test instead of quietly walking nothing and passing.
+     */
     private static final List<Path> ABOVE_INFRASTRUCTURE = List.of(
-            Path.of("src/main/java/com/jrobertgardzinski/collections/domain"),
-            Path.of("src/main/java/com/jrobertgardzinski/collections/config"),
-            Path.of("src/main/java/com/jrobertgardzinski/collections/application"));
+            Path.of("../collections-domain/src/main/java/com/jrobertgardzinski/collections/domain"),
+            Path.of("../collections-config/src/main/java/com/jrobertgardzinski/collections/config"),
+            Path.of("../collections-application/src/main/java/com/jrobertgardzinski/collections/application"));
 
     /**
      * Vendor words, not concepts. {@code observ} is deliberately absent: {@code Observation} and
