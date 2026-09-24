@@ -9,6 +9,7 @@ import com.jrobertgardzinski.collections.application.PurgeUserItems;
 import com.jrobertgardzinski.collections.application.RekeyUserItems;
 import com.jrobertgardzinski.collections.application.RestoreUserItems;
 import com.jrobertgardzinski.collections.domain.ItemRef;
+import com.jrobertgardzinski.collections.closure.CollectionsClosureParticipant;
 import com.jrobertgardzinski.collections.domain.Observation;
 import com.jrobertgardzinski.observation.Observations;
 import com.zaxxer.hikari.HikariConfig;
@@ -74,16 +75,25 @@ class RenamedMemberKeepsTheirCollectionsTest {
         purges = new PurgeCommandsConsumer(new MarkUserItemsForErasure(erasure, Clock.systemUTC()),
                 new RestoreUserItems(erasure), new PurgeUserItems(erasure), mapper, stated::add);
         logLines.start();
-        purgeLogger().addAppender(logLines);
+        purgeLoggers().forEach(logger -> logger.addAppender(logLines));
     }
 
     @AfterEach
     void untapTheLog() {
-        purgeLogger().detachAppender(logLines);
+        purgeLoggers().forEach(logger -> logger.detachAppender(logLines));
     }
 
-    private static ch.qos.logback.classic.Logger purgeLogger() {
-        return (ch.qos.logback.classic.Logger) LoggerFactory.getLogger(PurgeCommandsConsumer.class);
+    /**
+     * BOTH loggers, because the two halves of this path log for different reasons: the consumer
+     * says what it could not read off the wire, and the participant
+     * (collections_account-closure) says what it decided. A test watching only one of them goes
+     * half blind the moment a line moves across that boundary — which is exactly what happened
+     * when the participant was cut out of the consumer.
+     */
+    private static java.util.List<ch.qos.logback.classic.Logger> purgeLoggers() {
+        return java.util.List.of(
+                (ch.qos.logback.classic.Logger) LoggerFactory.getLogger(PurgeCommandsConsumer.class),
+                (ch.qos.logback.classic.Logger) LoggerFactory.getLogger(CollectionsClosureParticipant.class));
     }
 
     @Test

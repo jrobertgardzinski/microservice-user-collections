@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.jrobertgardzinski</groupId>
+        <artifactId>microservice-user-collections</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+    <artifactId>collections_account-closure</artifactId>
+
+    <!--
+      This service's side of ONE cross-service process: closing an account. Read this module and
+      you know what happens to a person's saved references when they leave — the three commands,
+      which is reversible, and the one thing only this axis has to say (what the closure could not
+      reach) — without first deciding whether the portal is a monolith or six services. Nothing in
+      here knows Kafka, HTTP or a database; the consumer that carries the commands does, and lives
+      next door in collections-infrastructure.
+
+      THE UNDERSCORE IS THE POINT. `collections-<x>` is a LAYER of this service;
+      `collections_<x>` is this service's part in a process it shares with others, named after the
+      library the participants speak through. memes_account-closure and comments_account-closure
+      are the other ends of this same conversation, and none of the three is a layer.
+    -->
+    <dependencies>
+        <dependency>
+            <groupId>com.jrobertgardzinski</groupId>
+            <artifactId>collections-application</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.jrobertgardzinski</groupId>
+            <artifactId>collections-domain</artifactId>
+        </dependency>
+        <dependency>
+            <!-- the words the participants and the orchestrator share, including the parsed
+                 command every participant reads -->
+            <groupId>com.jrobertgardzinski</groupId>
+            <artifactId>account-closure</artifactId>
+            <version>1.0.0-SNAPSHOT</version>
+        </dependency>
+        <dependency>
+            <groupId>com.jrobertgardzinski</groupId>
+            <artifactId>observation</artifactId>
+            <version>1.0.0-SNAPSHOT</version>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.qameta.allure</groupId>
+            <artifactId>allure-junit5</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+</project>

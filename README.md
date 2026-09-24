@@ -8,6 +8,12 @@ Boot/Micronaut/Quarkus siblings), the estate's four layers as four Maven modules
 (`collections-domain` / `collections-config` / `collections-application` /
 `collections-infrastructure`), Postgres + Flyway (H2 in PostgreSQL mode for dev and tests).
 
+Beside them sits `collections_account-closure`: not a layer, but this service's part in ONE
+cross-service process — what happens to a person's saved references when their account closes.
+The underscore says so. `collections-<x>` is a layer; `collections_<x>` is a participation, named
+after the library the participants speak through, and `memes_account-closure` and
+`comments_account-closure` are the other ends of the same conversation.
+
 The layers are modules rather than packages because a package boundary is a convention and a
 module boundary is a classpath: `collections-application` compiles without Helidon, JDBC or Kafka
 on it, and `collections-infrastructure` is the only module that produces something you can run —

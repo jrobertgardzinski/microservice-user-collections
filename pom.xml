@@ -53,6 +53,7 @@
         <module>collections-domain</module>
         <module>collections-config</module>
         <module>collections-application</module>
+        <module>collections_account-closure</module>
         <module>collections-infrastructure</module>
     </modules>
 
@@ -93,6 +94,11 @@
             <dependency>
                 <groupId>com.jrobertgardzinski</groupId>
                 <artifactId>collections-application</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.jrobertgardzinski</groupId>
+                <artifactId>collections_account-closure</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <!-- LAST: everything Helidon and its third-party stack manage — the WebServer,

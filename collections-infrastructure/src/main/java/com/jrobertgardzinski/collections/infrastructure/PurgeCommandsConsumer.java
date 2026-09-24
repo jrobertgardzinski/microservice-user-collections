@@ -1,6 +1,9 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
+import com.jrobertgardzinski.closure.ClosureCommand;
 import com.jrobertgardzinski.closure.ClosureMessages;
+import com.jrobertgardzinski.collections.closure.CollectionsClosureParticipant;
+import com.jrobertgardzinski.collections.closure.ClosureOutcome;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jrobertgardzinski.observation.Observations;
@@ -187,9 +190,11 @@ public class PurgeCommandsConsumer {
     /** The compensation: the marks come off and the leaver's lists are whole again. */
     static final String RESTORE = ClosureMessages.RESTORE_USER_CONTENT;
 
-    private final MarkUserItemsForErasure markForErasure;
-    private final RestoreUserItems restoreUserItems;
-    private final PurgeUserItems purgeUserItems;
+    /**
+     * What this service DOES about a closure — in collections_account-closure, which knows nothing
+     * of Kafka, JSON or this class. Everything left here is about the carrier.
+     */
+    private final CollectionsClosureParticipant participant;
     private final ObjectMapper mapper;
     /** Where a dropped saga command is STATED; the adapter decides it is a counter. */
     private final Observations<Observation> observations;
@@ -236,9 +241,8 @@ public class PurgeCommandsConsumer {
                           long initialBackoffMillis, Duration retryBudget,
                           Observations<Observation> observations) {
         this.observations = observations;
-        this.markForErasure = markForErasure;
-        this.restoreUserItems = restoreUserItems;
-        this.purgeUserItems = purgeUserItems;
+        this.participant = new CollectionsClosureParticipant(markForErasure, restoreUserItems,
+                purgeUserItems, observations);
         this.mapper = mapper;
         this.initialBackoffMillis = initialBackoffMillis;
         this.retryBudget = retryBudget;
@@ -324,59 +328,31 @@ public class PurgeCommandsConsumer {
                     commandPayload == null ? 0 : commandPayload.length());
             return Optional.empty();
         }
-        String type = command.path("type").asText();
-        if (!MARK.equals(type) && !ERASE.equals(type) && !RESTORE.equals(type)) {
+        String sagaId = command.path(ClosureMessages.Field.SAGA_ID).asText();
+        // No policy is read, and that is this axis's own answer rather than an omission: a saved
+        // reference is a pointer, so there is nothing about it to anonymise or keep for its
+        // popularity, and the leaver's conditions have no meaning here.
+        ClosureCommand parsed = new ClosureCommand(
+                command.path(ClosureMessages.Field.TYPE).asText(),
+                sagaId,
+                command.path(ClosureMessages.Field.EMAIL).asText(),
+                command.path(ClosureMessages.Field.INITIATED_BY).asText(),
+                Optional.empty());
+
+        // the closure and the compensation are the orchestrator ENDING the case: nothing to answer
+        if (!(participant.handle(parsed) instanceof ClosureOutcome.Reserved reserved)) {
             return Optional.empty();
-        }
-        String email = command.path("email").asText();
-        String sagaId = command.path("sagaId").asText();
-        if (email.isBlank()) {
-            // a command with nobody to act on: retrying can't fix it, and confirming would tell the
-            // orchestrator a deletion happened that never did — so drop it without a confirmation
-            LOG.warn("dropping {} without an email (saga {})", type, sagaId);
-            return Optional.empty();
-        }
-        // the saga id identifies the run in logs; the e-mail is PII and stays out of INFO lines
-        if (ERASE.equals(type)) {
-            // the CLOSURE. Only this destroys anything, and only what the mark reserved
-            PurgeUserItems.Closure closure = purgeUserItems.execute(email);
-            LOG.info("erased {} reserved collection refs on the saga's closure (saga {})",
-                    closure.erased(), sagaId);
-            if (closure.leftBehind() > 0) {
-                observations.record(new Observation.ErasureResidue(closure.leftBehind()));
-                LOG.warn("the closure of saga {} left {} references standing under the address it"
-                        + " erased: they were saved after the mark, by a token this offline gate"
-                        + " still accepted, so no command of this saga may destroy them and none"
-                        + " will ever come. They need removing by hand —"
-                        + " collections_erasure_residue_total is the count", sagaId,
-                        closure.leftBehind());
-            }
-            return Optional.empty();
-        }
-        if (RESTORE.equals(type)) {
-            // the COMPENSATION. Not confirmed either: both of these are the orchestrator ENDING
-            // the case, and answering would tell it something it has already decided
-            LOG.info("restored {} collection refs: the saga compensated (saga {})",
-                    restoreUserItems.execute(email), sagaId);
-            return Optional.empty();
-        }
-        int reserved = markForErasure.execute(email);
-        LOG.info("marked {} collection refs of one leaver for erasure (saga {})", reserved, sagaId);
-        if (reserved == 0) {
-            observations.record(new Observation.PurgeReservedNothing());
-            LOG.warn("confirming a purge that reserved NOTHING (saga {}): either this member never"
-                    + " saved anything, or their references are still keyed by an address they have"
-                    + " changed and the rename has not been consumed yet", sagaId);
         }
         try {
             var confirmation = mapper.createObjectNode()
                     .put(ClosureMessages.Field.TYPE, ClosureMessages.USER_CONTENT_PURGED)
-                    .put("email", email)
+                    .put("email", parsed.email())
                     // how many references this mark actually took out of the member's lists; the
-                    // difference between an erasure and an answer that only looks like one
-                    .put("reserved", reserved)
-                    // how many references this mark actually took out of the member's lists; the
-                    // difference between an erasure and an answer that only looks like one
+                    // difference between an erasure and an answer that only looks like one.
+                    // A field ADDED inside version 1, which workspace ADR 0004 permits: nothing
+                    // was renamed or removed, and the pacts that pin this message pin only the
+                    // fields they read
+                    .put("reserved", reserved.references())
                     // envelope version (workspace ADR 0004): fields only ever added within version 1
                     .put("version", 1);
             // A BLANK sagaId is worse than an absent one. The orchestrator drops a confirmation

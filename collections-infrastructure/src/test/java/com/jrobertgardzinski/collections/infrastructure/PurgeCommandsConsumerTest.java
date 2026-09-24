@@ -1,5 +1,6 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
+import com.jrobertgardzinski.collections.closure.CollectionsClosureParticipant;
 import com.jrobertgardzinski.collections.domain.Observation;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
@@ -47,16 +48,25 @@ class PurgeCommandsConsumerTest {
     @BeforeEach
     void tapTheLog() {
         logLines.start();
-        consumerLogger().addAppender(logLines);
+        consumerLoggers().forEach(logger -> logger.addAppender(logLines));
     }
 
     @AfterEach
     void untapTheLog() {
-        consumerLogger().detachAppender(logLines);
+        consumerLoggers().forEach(logger -> logger.detachAppender(logLines));
     }
 
-    private static Logger consumerLogger() {
-        return (Logger) LoggerFactory.getLogger(PurgeCommandsConsumer.class);
+    /**
+     * BOTH loggers, because the two halves of this path log for different reasons: the consumer
+     * says what it could not read off the wire, and the participant
+     * (collections_account-closure) says what it decided. A test watching only one of them goes
+     * half blind the moment a line moves across that boundary — which is exactly what happened
+     * when the participant was cut out of the consumer.
+     */
+    private static java.util.List<Logger> consumerLoggers() {
+        return java.util.List.of(
+                (Logger) LoggerFactory.getLogger(PurgeCommandsConsumer.class),
+                (Logger) LoggerFactory.getLogger(CollectionsClosureParticipant.class));
     }
 
     @Test
