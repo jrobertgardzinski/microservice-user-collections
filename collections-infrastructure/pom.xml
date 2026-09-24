@@ -25,6 +25,14 @@
             <artifactId>collections-application</artifactId>
         </dependency>
         <dependency>
+            <!-- the port contracts (the REFERENCE implementations live here) -->
+            <groupId>com.jrobertgardzinski</groupId>
+            <artifactId>collections-application</artifactId>
+            <version>${project.version}</version>
+            <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
             <!-- this service's side of the account-closure saga: the decisions, without the wire.
                  The Kafka consumer next door only carries commands to it. -->
             <groupId>com.jrobertgardzinski</groupId>

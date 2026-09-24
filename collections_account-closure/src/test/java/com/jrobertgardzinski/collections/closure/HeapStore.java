@@ -69,7 +69,9 @@ final class HeapStore implements CollectionStore, ItemErasure {
                 return;
             }
         }
-        rows.add(state);
+        // and NOTHING when no row matches. The adapter runs `UPDATE … WHERE`, which quietly
+        // matches nothing; appending here would hand a member a reference they never saved. The
+        // port contract catches this, and caught exactly this.
     }
 
     @Override
@@ -82,7 +84,7 @@ final class HeapStore implements CollectionStore, ItemErasure {
     @Override
     public List<SavedItem> pendingSince(Instant cutoff) {
         return rows.stream().filter(SavedItem::isPendingErasure)
-                .filter(row -> !row.markedForErasureAt().isAfter(cutoff)).toList();
+                .filter(row -> row.markedForErasureAt().isBefore(cutoff)).toList();
     }
 
     /** Everything still held under this address, marked or not — what the closure has to clear. */
