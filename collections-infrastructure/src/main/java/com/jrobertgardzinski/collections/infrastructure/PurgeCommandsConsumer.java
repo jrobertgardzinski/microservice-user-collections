@@ -1,6 +1,7 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
 import com.jrobertgardzinski.closure.ClosureCommand;
+import com.jrobertgardzinski.closure.ClosureConfirmation;
 import com.jrobertgardzinski.closure.ClosureMessages;
 import com.jrobertgardzinski.collections.closure.CollectionsClosureParticipant;
 import com.jrobertgardzinski.collections.closure.ClosureOutcome;
@@ -344,26 +345,12 @@ public class PurgeCommandsConsumer {
             return Optional.empty();
         }
         try {
-            var confirmation = mapper.createObjectNode()
-                    .put(ClosureMessages.Field.TYPE, ClosureMessages.USER_CONTENT_PURGED)
-                    .put("email", parsed.email())
-                    // how many references this mark actually took out of the member's lists; the
-                    // difference between an erasure and an answer that only looks like one.
-                    // A field ADDED inside version 1, which workspace ADR 0004 permits: nothing
-                    // was renamed or removed, and the pacts that pin this message pin only the
-                    // fields they read
-                    .put("reserved", reserved.references())
-                    // envelope version (workspace ADR 0004): fields only ever added within version 1
-                    .put("version", 1);
-            // A BLANK sagaId is worse than an absent one. The orchestrator drops a confirmation
-            // whose sagaId is present but unparseable — a deliberate poison-pill rule — while one
-            // with NO sagaId falls back to matching by e-mail. So a purge command that arrived
-            // without the field had its confirmation thrown away rather than matched, and the saga
-            // waited out its timeout for an answer that had in fact come back.
-            if (sagaId != null && !sagaId.isBlank()) {
-                confirmation.put("sagaId", sagaId);
-            }
-            return Optional.of(mapper.writeValueAsString(confirmation));
+            // The FIELD SET is the agreement's, not this service's: ClosureConfirmation knows
+            // which fields go out — including the rule that a BLANK saga id is worse than an
+            // absent one, because the orchestrator drops an unparseable one while a missing one
+            // falls back to matching by e-mail. This service only says what it reserved.
+            return Optional.of(mapper.writeValueAsString(
+                    new ClosureConfirmation(sagaId, parsed.email(), reserved.references()).fields()));
         } catch (Exception impossible) {
             throw new IllegalStateException("could not build confirmation", impossible);
         }
