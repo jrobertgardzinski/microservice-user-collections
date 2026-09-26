@@ -1,7 +1,7 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
 import com.jrobertgardzinski.collections.application.ItemErasure;
-import com.jrobertgardzinski.collections.application.ItemErasureContract;
+import com.jrobertgardzinski.collections.application.ItemErasureContractTest;
 import com.jrobertgardzinski.collections.domain.ItemRef;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
@@ -22,7 +22,7 @@ import java.util.UUID;
  */
 @Epic("Architecture")
 @Feature("A stand-in behaves like the adapter it stands in for")
-class JdbcItemErasureContractTest extends ItemErasureContract {
+class JdbcItemErasureTest extends ItemErasureContractTest {
 
     private JdbcCollectionStore store;
     private JdbcItemErasure erasure;

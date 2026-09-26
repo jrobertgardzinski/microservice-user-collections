@@ -25,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>Fresh names per test method, because one implementation is a database other suites share.
  */
-public abstract class ItemErasureContract {
+public abstract class ItemErasureContractTest {
 
     private static final Instant NOON = Instant.parse("2026-09-24T12:00:00Z");
     private static final String LIST = "favourites";

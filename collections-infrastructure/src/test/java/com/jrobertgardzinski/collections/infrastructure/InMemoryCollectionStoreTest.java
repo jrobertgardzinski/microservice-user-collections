@@ -1,7 +1,7 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
 import com.jrobertgardzinski.collections.application.ItemErasure;
-import com.jrobertgardzinski.collections.application.ItemErasureContract;
+import com.jrobertgardzinski.collections.application.ItemErasureContractTest;
 import com.jrobertgardzinski.collections.domain.ItemRef;
 import io.qameta.allure.Epic;
 import io.qameta.allure.Feature;
@@ -14,7 +14,7 @@ import io.qameta.allure.Feature;
  */
 @Epic("Architecture")
 @Feature("A stand-in behaves like the adapter it stands in for")
-class InMemoryCollectionStoreContractTest extends ItemErasureContract {
+class InMemoryCollectionStoreTest extends ItemErasureContractTest {
 
     private final InMemoryCollectionStore store = new InMemoryCollectionStore();
 
