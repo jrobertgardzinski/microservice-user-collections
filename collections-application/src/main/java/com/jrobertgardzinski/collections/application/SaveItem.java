@@ -10,9 +10,9 @@ public class SaveItem {
 
     public enum Status { SAVED, ALREADY_SAVED }
 
-    private final CollectionStore store;
+    private final CollectionRepository store;
 
-    public SaveItem(CollectionStore store) {
+    public SaveItem(CollectionRepository store) {
         this.store = store;
     }
 

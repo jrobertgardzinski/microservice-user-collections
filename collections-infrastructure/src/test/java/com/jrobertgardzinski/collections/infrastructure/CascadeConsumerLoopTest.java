@@ -1,7 +1,7 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.jrobertgardzinski.collections.application.InMemoryCollectionStore;
+import com.jrobertgardzinski.collections.application.InMemoryCollectionRepository;
 import com.jrobertgardzinski.collections.application.ItemReferences;
 import com.jrobertgardzinski.collections.application.PurgeDeletedItem;
 import com.jrobertgardzinski.collections.domain.ItemRef;
@@ -58,7 +58,7 @@ class CascadeConsumerLoopTest {
     private static final long TEST_BACKOFF_MILLIS = 5;   // retries in millis, not the real second
 
     private final ObjectMapper mapper = new ObjectMapper();
-    private final InMemoryCollectionStore store = new InMemoryCollectionStore();
+    private final InMemoryCollectionRepository store = new InMemoryCollectionRepository();
 
     private Thread loopThread;
 

@@ -1,6 +1,6 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
-import com.jrobertgardzinski.collections.application.CollectionStore;
+import com.jrobertgardzinski.collections.application.CollectionRepository;
 import com.jrobertgardzinski.collections.application.ItemReferences;
 import com.jrobertgardzinski.collections.domain.ItemRef;
 import com.jrobertgardzinski.collections.domain.ItemStatus;
@@ -14,7 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The durable {@link CollectionStore}: rows in {@code collection_items}, served by Postgres in prod
+ * The durable {@link CollectionRepository}: rows in {@code collection_items}, served by Postgres in prod
  * and H2 (PostgreSQL mode) in dev/tests through the same SQL. Saving is made idempotent by the
  * UNIQUE constraint — a duplicate insert raises SQLState 23505, which both engines use, and we read
  * that as "already saved" rather than an error.
@@ -29,7 +29,7 @@ import java.util.List;
  * because there is no condition here to forget. Writes name the table, as writes must; the erasure
  * state itself belongs to {@link JdbcItemErasure}, the one adapter allowed to READ the table.
  */
-public class JdbcCollectionStore implements CollectionStore, ItemReferences {
+public class JdbcCollectionRepository implements CollectionRepository, ItemReferences {
 
     private static final String UNIQUE_VIOLATION = "23505";
 
@@ -44,7 +44,7 @@ public class JdbcCollectionStore implements CollectionStore, ItemReferences {
 
     private final DataSource dataSource;
 
-    public JdbcCollectionStore(DataSource dataSource) {
+    public JdbcCollectionRepository(DataSource dataSource) {
         this.dataSource = dataSource;
     }
 

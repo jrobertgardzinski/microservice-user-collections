@@ -1,6 +1,6 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
-import com.jrobertgardzinski.collections.application.InMemoryCollectionStore;
+import com.jrobertgardzinski.collections.application.InMemoryCollectionRepository;
 import com.jrobertgardzinski.collections.domain.Observation;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
@@ -43,7 +43,7 @@ class ErasureBacklogWatchTest {
     private static final String LEAVER = "leaver@example.com";
     private static final Instant MARKED_AT = Instant.parse("2026-08-08T10:00:00Z");
 
-    private final InMemoryCollectionStore store = new InMemoryCollectionStore();
+    private final InMemoryCollectionRepository store = new InMemoryCollectionRepository();
     private final ListAppender<ILoggingEvent> logLines = new ListAppender<>();
 
     @BeforeEach

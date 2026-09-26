@@ -16,7 +16,7 @@ import java.util.List;
  * wholesale "delete everything this user has" is exactly the operation that made this participant
  * impossible to compensate, and leaving it within reach invites the next caller to bypass the saga.
  */
-public interface CollectionStore {
+public interface CollectionRepository {
 
     /** Adds the ref to the user's collection; returns true only if it was not already there. */
     boolean add(String user, String collection, ItemRef item);

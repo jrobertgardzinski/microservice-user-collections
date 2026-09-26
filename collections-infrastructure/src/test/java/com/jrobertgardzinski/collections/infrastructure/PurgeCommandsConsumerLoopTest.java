@@ -1,13 +1,13 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
-import com.jrobertgardzinski.collections.application.InMemoryCollectionStore;
+import com.jrobertgardzinski.collections.application.InMemoryCollectionRepository;
 import com.jrobertgardzinski.collections.closure.CollectionsClosureParticipant;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.jrobertgardzinski.collections.application.CollectionStore;
+import com.jrobertgardzinski.collections.application.CollectionRepository;
 import com.jrobertgardzinski.collections.application.ItemErasure;
 import com.jrobertgardzinski.collections.application.MarkUserItemsForErasure;
 import com.jrobertgardzinski.collections.application.PurgeUserItems;
@@ -78,7 +78,7 @@ class PurgeCommandsConsumerLoopTest {
     // tests had to be read "before" and compared relative, and a forgotten reset made a
     // green test out of a wrong number
     private final ExportedObservations observations = new ExportedObservations();
-    private final InMemoryCollectionStore store = new InMemoryCollectionStore();
+    private final InMemoryCollectionRepository store = new InMemoryCollectionRepository();
 
     private final ListAppender<ILoggingEvent> logLines = new ListAppender<>();
 

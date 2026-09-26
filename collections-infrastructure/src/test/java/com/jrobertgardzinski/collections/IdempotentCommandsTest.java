@@ -7,7 +7,7 @@ import com.jrobertgardzinski.collections.application.RemoveItem;
 import com.jrobertgardzinski.collections.application.RestoreUserItems;
 import com.jrobertgardzinski.collections.application.SaveItem;
 import com.jrobertgardzinski.collections.domain.ItemRef;
-import com.jrobertgardzinski.collections.application.InMemoryCollectionStore;
+import com.jrobertgardzinski.collections.application.InMemoryCollectionRepository;
 import io.qameta.allure.Epic;
 import io.qameta.allure.Feature;
 import org.junit.jupiter.api.DynamicTest;
@@ -36,7 +36,7 @@ class IdempotentCommandsTest {
     /**
      * A frozen clock, so "twice equals once" is a statement about the STATE and not about two
      * different wall-clock readings. The rule that a redelivered mark keeps the FIRST instant is
-     * pinned where it can be seen properly, on a real database, in JdbcCollectionStoreTest.
+     * pinned where it can be seen properly, on a real database, in JdbcCollectionRepositoryTest.
      */
     private static final java.time.Clock CLOCK = java.time.Clock.fixed(
             java.time.Instant.parse("2026-08-08T10:00:00Z"), java.time.ZoneOffset.UTC);
@@ -45,10 +45,10 @@ class IdempotentCommandsTest {
     private static final ItemRef COMMENT_7 = new ItemRef("comment", "7");
 
     /** Every command the service exposes, each exercised against a seeded store. */
-    private static final Map<String, Consumer<InMemoryCollectionStore>> COMMANDS = commands();
+    private static final Map<String, Consumer<InMemoryCollectionRepository>> COMMANDS = commands();
 
-    private static Map<String, Consumer<InMemoryCollectionStore>> commands() {
-        Map<String, Consumer<InMemoryCollectionStore>> c = new LinkedHashMap<>();
+    private static Map<String, Consumer<InMemoryCollectionRepository>> commands() {
+        Map<String, Consumer<InMemoryCollectionRepository>> c = new LinkedHashMap<>();
         c.put("save into an empty collection",
                 store -> new SaveItem(store).execute("alice", "favourites", MEME_42));
         c.put("save what is already there",
@@ -80,8 +80,8 @@ class IdempotentCommandsTest {
         return c;
     }
 
-    private static InMemoryCollectionStore seeded() {
-        InMemoryCollectionStore store = new InMemoryCollectionStore();
+    private static InMemoryCollectionRepository seeded() {
+        InMemoryCollectionRepository store = new InMemoryCollectionRepository();
         store.add("alice", "watchlist", COMMENT_7);
         store.add("bob", "favourites", MEME_42);   // a bystander no command may disturb
         return store;
@@ -89,11 +89,11 @@ class IdempotentCommandsTest {
 
     /**
      * The observable state, flattened — what "the same state" means in the law. The RESERVATIONS
-     * are part of it, deliberately: a mark is invisible to {@link InMemoryCollectionStore#list} by
+     * are part of it, deliberately: a mark is invisible to {@link InMemoryCollectionRepository#list} by
      * design, so a fingerprint built from listings alone would let every erasure command pass this
      * law without proving anything at all.
      */
-    private static Map<String, Object> fingerprint(InMemoryCollectionStore store) {
+    private static Map<String, Object> fingerprint(InMemoryCollectionRepository store) {
         Map<String, Object> f = new LinkedHashMap<>();
         for (String user : new String[] {"alice", "bob"}) {
             for (String collection : new String[] {"favourites", "watchlist"}) {
@@ -108,10 +108,10 @@ class IdempotentCommandsTest {
     Stream<DynamicTest> every_command_twice_equals_once() {
         return COMMANDS.entrySet().stream().map(entry -> DynamicTest.dynamicTest(
                 entry.getKey(), () -> {
-                    InMemoryCollectionStore once = seeded();
+                    InMemoryCollectionRepository once = seeded();
                     entry.getValue().accept(once);
 
-                    InMemoryCollectionStore twice = seeded();
+                    InMemoryCollectionRepository twice = seeded();
                     entry.getValue().accept(twice);
                     entry.getValue().accept(twice);
 

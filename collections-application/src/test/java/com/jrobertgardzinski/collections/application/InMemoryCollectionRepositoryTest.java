@@ -10,9 +10,9 @@ import com.jrobertgardzinski.collections.domain.ItemRef;
  * Living here, on the test classpath next to {@link ItemErasure} and its contract, says the same
  * thing structurally instead of in a comment.
  */
-class InMemoryCollectionStoreTest extends ItemErasureContractTest {
+class InMemoryCollectionRepositoryTest extends ItemErasureContractTest {
 
-    private final InMemoryCollectionStore store = new InMemoryCollectionStore();
+    private final InMemoryCollectionRepository store = new InMemoryCollectionRepository();
 
     @Override
     protected ItemErasure erasure() {

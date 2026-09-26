@@ -3,7 +3,7 @@ package com.jrobertgardzinski.collections.infrastructure;
 import com.jrobertgardzinski.collections.domain.Observation;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jrobertgardzinski.observation.Observations;
-import com.jrobertgardzinski.collections.application.CollectionStore;
+import com.jrobertgardzinski.collections.application.CollectionRepository;
 import com.jrobertgardzinski.collections.application.ItemErasure;
 import com.jrobertgardzinski.collections.application.MarkUserItemsForErasure;
 import com.jrobertgardzinski.collections.application.PurgeUserItems;

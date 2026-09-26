@@ -25,12 +25,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Feature("Purge deleted item")
 class PurgeDeletedItemTest {
 
-    private InMemoryCollectionStore store;
+    private InMemoryCollectionRepository store;
     private PurgeDeletedItem purge;
 
     @BeforeEach
     void freshStore() {
-        store = new InMemoryCollectionStore();
+        store = new InMemoryCollectionRepository();
         purge = new PurgeDeletedItem(store);
     }
 
@@ -110,7 +110,7 @@ class PurgeDeletedItemTest {
     @Test
     void nothing_worth_purging_is_zero_rather_than_an_empty_statement() {
         // the guard that keeps a degenerate event out of the adapter: an IN () list is not valid
-        // SQL, so this must never reach JdbcCollectionStore
+        // SQL, so this must never reach JdbcCollectionRepository
         assertEquals(0, purge.execute("meme", List.of()));
         assertEquals(0, purge.execute("meme", Collections.singletonList(null)));
         assertEquals(0, purge.execute("meme", null));

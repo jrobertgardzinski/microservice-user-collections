@@ -9,8 +9,8 @@ import java.util.List;
  * The erasure-aware side of the store: the only port in this service that can see a saved reference
  * which is not {@link com.jrobertgardzinski.collections.domain.ItemStatus#ACTIVE}.
  *
- * <p><strong>Why a second port and not four more methods on {@link CollectionStore}.</strong>
- * {@link CollectionStore} is the owner's world, and its promise is absolute: nothing it lists is
+ * <p><strong>Why a second port and not four more methods on {@link CollectionRepository}.</strong>
+ * {@link CollectionRepository} is the owner's world, and its promise is absolute: nothing it lists is
  * pending erasure, because its adapter reads from the {@code active_collection_items} view and
  * never from the table. A port that could answer both questions would make that promise a matter of
  * which method you happened to call — and would leave the build-time guard

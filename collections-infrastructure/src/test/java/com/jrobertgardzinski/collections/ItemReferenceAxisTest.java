@@ -1,7 +1,7 @@
 package com.jrobertgardzinski.collections;
 
 import com.jrobertgardzinski.collections.domain.ItemRef;
-import com.jrobertgardzinski.collections.infrastructure.JdbcCollectionStore;
+import com.jrobertgardzinski.collections.infrastructure.JdbcCollectionRepository;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import io.qameta.allure.Epic;
@@ -39,7 +39,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ItemReferenceAxisTest {
 
     private DataSource dataSource;
-    private JdbcCollectionStore store;
+    private JdbcCollectionRepository store;
 
     @BeforeEach
     void migrateFreshDatabase() {
@@ -49,7 +49,7 @@ class ItemReferenceAxisTest {
         config.setUsername("sa");
         dataSource = new HikariDataSource(config);
         Flyway.configure().dataSource(dataSource).load().migrate();
-        store = new JdbcCollectionStore(dataSource);
+        store = new JdbcCollectionRepository(dataSource);
     }
 
     @Test

@@ -12,7 +12,7 @@ import java.time.Instant;
  * back when a LATER participant of the same saga fails ({@link RestoreUserItems}).
  *
  * <p>What the leaver would see immediately is nevertheless the full effect of a deletion: their
- * lists are empty, because every listing reads through {@link CollectionStore}, whose adapter
+ * lists are empty, because every listing reads through {@link CollectionRepository}, whose adapter
  * cannot see a marked row.
  *
  * <p><strong>Idempotent</strong>, as every saga command must be (workspace ADR 0006): the command

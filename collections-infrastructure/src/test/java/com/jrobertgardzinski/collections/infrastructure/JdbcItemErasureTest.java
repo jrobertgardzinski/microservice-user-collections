@@ -16,7 +16,7 @@ import java.util.UUID;
  * The REFERENCE: the adapter the service actually runs on, against a real database migrated by
  * Flyway. Without it the contract would only prove that the stand-ins agree with each other.
  *
- * <p>A fresh in-memory database per test, the same way {@code JdbcCollectionStoreTest} does it —
+ * <p>A fresh in-memory database per test, the same way {@code JdbcCollectionRepositoryTest} does it —
  * the contract also protects itself with per-run addresses, and the two together mean this suite
  * cannot be ordered into failing.
  */
@@ -24,7 +24,7 @@ import java.util.UUID;
 @Feature("A stand-in behaves like the adapter it stands in for")
 class JdbcItemErasureTest extends ItemErasureContractTest {
 
-    private JdbcCollectionStore store;
+    private JdbcCollectionRepository store;
     private JdbcItemErasure erasure;
 
     @BeforeEach
@@ -35,7 +35,7 @@ class JdbcItemErasureTest extends ItemErasureContractTest {
         config.setUsername("sa");
         HikariDataSource dataSource = new HikariDataSource(config);
         Flyway.configure().dataSource(dataSource).load().migrate();
-        store = new JdbcCollectionStore(dataSource);
+        store = new JdbcCollectionRepository(dataSource);
         erasure = new JdbcItemErasure(dataSource);
     }
 

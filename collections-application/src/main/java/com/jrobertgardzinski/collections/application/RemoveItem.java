@@ -10,9 +10,9 @@ public class RemoveItem {
 
     public enum Status { REMOVED, NOT_SAVED }
 
-    private final CollectionStore store;
+    private final CollectionRepository store;
 
-    public RemoveItem(CollectionStore store) {
+    public RemoveItem(CollectionRepository store) {
         this.store = store;
     }
 

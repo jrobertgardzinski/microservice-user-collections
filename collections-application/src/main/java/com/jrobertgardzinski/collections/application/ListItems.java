@@ -10,9 +10,9 @@ import java.util.List;
  */
 public class ListItems {
 
-    private final CollectionStore store;
+    private final CollectionRepository store;
 
-    public ListItems(CollectionStore store) {
+    public ListItems(CollectionRepository store) {
         this.store = store;
     }
 

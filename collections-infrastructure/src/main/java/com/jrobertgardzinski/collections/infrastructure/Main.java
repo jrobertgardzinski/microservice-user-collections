@@ -284,9 +284,9 @@ public final class Main {
         String securityUrl = System.getenv().getOrDefault("SECURITY_URL", "http://localhost:8080");
 
         DataSource dataSource = Database.migratedDataSource();
-        // the concrete type, not the CollectionStore port: this one adapter answers BOTH ports —
+        // the concrete type, not the CollectionRepository port: this one adapter answers BOTH ports —
         // the user axis the API and the saga use, and the item axis the cascade uses (V2's index)
-        JdbcCollectionStore store = new JdbcCollectionStore(dataSource);
+        JdbcCollectionRepository store = new JdbcCollectionRepository(dataSource);
         // the erasure-aware side of the same table, and the ONLY adapter here allowed to read a
         // row the account-deletion saga has reserved (ADR 0007)
         JdbcItemErasure erasure = new JdbcItemErasure(dataSource);

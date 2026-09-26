@@ -34,7 +34,7 @@ import java.sql.SQLException;
  * untouched or had its owner's rows taken by the deletion that freed it. If that ever stopped being
  * true the statement fails with 23505 and the failure leaves this method as it is — the listener
  * does not commit the offset and retries the whole rename, which is the right failure. What must
- * never happen is the other reading of a duplicate, the one {@link JdbcCollectionStore#add} is
+ * never happen is the other reading of a duplicate, the one {@link JdbcCollectionRepository#add} is
  * allowed to make: "already saved", a swallowed 23505 and a reference silently left behind under
  * the old address.
  */

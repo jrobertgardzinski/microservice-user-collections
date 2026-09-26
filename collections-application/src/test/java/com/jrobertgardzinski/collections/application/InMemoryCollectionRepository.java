@@ -15,7 +15,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * A heap-only {@link CollectionStore} for the tests that want no JDBC at all — this module's own
+ * A heap-only {@link CollectionRepository} for the tests that want no JDBC at all — this module's own
  * unit tests, {@code collections-infrastructure}'s HTTP scenarios, and (via this module's test-jar)
  * account-closure-specs, which used to keep a hand-copied twin of this exact class for the same
  * reason and drifted from it (see {@link ItemErasureContractTest}, which both this class and the
@@ -31,12 +31,12 @@ import java.util.Set;
  * That mirrors {@code active_collection_items} exactly, which is what makes a scenario that runs
  * against this store mean something about the one that runs against Postgres.
  *
- * <p>Living here, next to {@link CollectionStore}/{@link ItemErasure} and their contract test,
+ * <p>Living here, next to {@link CollectionRepository}/{@link ItemErasure} and their contract test,
  * rather than in {@code collections-infrastructure}, is deliberate: this class is pure JDK, exactly
  * as framework-free as the ports it stands in for, and a test double belongs on the test classpath
  * of everyone who needs it, not inside the jar the running service ships.
  */
-public class InMemoryCollectionStore implements CollectionStore, ItemReferences, ItemErasure {
+public class InMemoryCollectionRepository implements CollectionRepository, ItemReferences, ItemErasure {
 
     private record Key(String user, String collection) {
     }

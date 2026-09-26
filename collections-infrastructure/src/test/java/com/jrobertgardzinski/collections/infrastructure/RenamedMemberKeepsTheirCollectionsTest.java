@@ -39,7 +39,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * EMPTY favourites list, and deleting that account confirmed an erasure that had matched no rows.
  *
  * <p>Against a real database on purpose — H2 in PostgreSQL mode, migrated by Flyway, the same shape
- * {@code JdbcCollectionStoreTest} uses. The whole fix is one column and the UNIQUE constraint it
+ * {@code JdbcCollectionRepositoryTest} uses. The whole fix is one column and the UNIQUE constraint it
  * takes part in, and an in-memory store would agree with any SQL at all.
  */
 @Epic("Saga")
@@ -55,7 +55,7 @@ class RenamedMemberKeepsTheirCollectionsTest {
     private final List<Observation> stated = new ArrayList<>();
     private final ListAppender<ILoggingEvent> logLines = new ListAppender<>();
 
-    private JdbcCollectionStore store;
+    private JdbcCollectionRepository store;
     private JdbcItemErasure erasure;
     private SecurityEventsConsumer renames;
     private PurgeCommandsConsumer purges;
@@ -68,7 +68,7 @@ class RenamedMemberKeepsTheirCollectionsTest {
         config.setUsername("sa");
         HikariDataSource dataSource = new HikariDataSource(config);
         Flyway.configure().dataSource(dataSource).load().migrate();
-        store = new JdbcCollectionStore(dataSource);
+        store = new JdbcCollectionRepository(dataSource);
         erasure = new JdbcItemErasure(dataSource);
         renames = new SecurityEventsConsumer(
                 new RekeyUserItems(new JdbcUserItemsRekey(dataSource)), mapper);
@@ -194,7 +194,7 @@ class RenamedMemberKeepsTheirCollectionsTest {
     void a_colliding_rekey_fails_rather_than_merges() {
         // The address takes part in one UNIQUE constraint, uq_collection_item, so this is the one
         // way the move can fail. It cannot happen while security refuses a move onto a registered
-        // address — but the reading a few lines away in JdbcCollectionStore#add, where 23505 means
+        // address — but the reading a few lines away in JdbcCollectionRepository#add, where 23505 means
         // "already saved", would turn it into a reference silently left behind under the old
         // address and a member half-moved.
         store.add(OLD, "favourites", MEME);

@@ -1,6 +1,6 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
-import com.jrobertgardzinski.collections.application.InMemoryCollectionStore;
+import com.jrobertgardzinski.collections.application.InMemoryCollectionRepository;
 import com.jrobertgardzinski.collections.closure.CollectionsClosureParticipant;
 import com.jrobertgardzinski.collections.domain.Observation;
 import ch.qos.logback.classic.Logger;
@@ -39,7 +39,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class PurgeCommandsConsumerTest {
 
     private final ObjectMapper mapper = new ObjectMapper();
-    private final InMemoryCollectionStore store = new InMemoryCollectionStore();
+    private final InMemoryCollectionRepository store = new InMemoryCollectionRepository();
     private final PurgeCommandsConsumer consumer = new PurgeCommandsConsumer(
             new MarkUserItemsForErasure(store, java.time.Clock.systemUTC()),
             new RestoreUserItems(store), new PurgeUserItems(store), mapper, Observations.<Observation>silent());

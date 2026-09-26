@@ -66,7 +66,7 @@ class MarkedItemRaceTest {
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:18-alpine");
 
     static HikariDataSource dataSource;
-    static JdbcCollectionStore store;
+    static JdbcCollectionRepository store;
     static JdbcItemErasure erasure;
 
     @BeforeAll
@@ -79,7 +79,7 @@ class MarkedItemRaceTest {
         config.setMaximumPoolSize(4);
         dataSource = new HikariDataSource(config);
         Flyway.configure().dataSource(dataSource).load().migrate();
-        store = new JdbcCollectionStore(dataSource);
+        store = new JdbcCollectionRepository(dataSource);
         erasure = new JdbcItemErasure(dataSource);
     }
 
@@ -92,7 +92,7 @@ class MarkedItemRaceTest {
     void freshFixture() {
         // leaver's own meme, saved by its own author AND by a fan — the row a running saga has
         // reserved (marked_for_erasure_at set) is exactly the row the cascade would destroy anyway,
-        // because the cascade's WHERE clause never looks at status (see JdbcCollectionStore#purge)
+        // because the cascade's WHERE clause never looks at status (see JdbcCollectionRepository#purge)
         store.add(LEAVER, "favourites", new com.jrobertgardzinski.collections.domain.ItemRef("meme", MEME));
         store.add(FAN, "favourites", new com.jrobertgardzinski.collections.domain.ItemRef("meme", MEME));
         markLeaversItemForErasure();

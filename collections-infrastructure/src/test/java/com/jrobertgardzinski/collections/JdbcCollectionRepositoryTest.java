@@ -4,7 +4,7 @@ import com.jrobertgardzinski.collections.domain.ItemRef;
 import com.jrobertgardzinski.collections.application.MarkUserItemsForErasure;
 import com.jrobertgardzinski.collections.application.PurgeUserItems;
 import com.jrobertgardzinski.collections.application.RestoreUserItems;
-import com.jrobertgardzinski.collections.infrastructure.JdbcCollectionStore;
+import com.jrobertgardzinski.collections.infrastructure.JdbcCollectionRepository;
 import com.jrobertgardzinski.collections.infrastructure.JdbcItemErasure;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
@@ -28,9 +28,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /** The JDBC adapter against a real database: H2 in PostgreSQL mode, migrated by Flyway. */
 @Epic("Infrastructure")
 @Feature("Collection persistence")
-class JdbcCollectionStoreTest {
+class JdbcCollectionRepositoryTest {
 
-    private JdbcCollectionStore store;
+    private JdbcCollectionRepository store;
     private JdbcItemErasure erasure;
     private HikariDataSource dataSource;
 
@@ -41,7 +41,7 @@ class JdbcCollectionStoreTest {
         config.setUsername("sa");
         dataSource = new HikariDataSource(config);
         Flyway.configure().dataSource(dataSource).load().migrate();
-        store = new JdbcCollectionStore(dataSource);
+        store = new JdbcCollectionRepository(dataSource);
         erasure = new JdbcItemErasure(dataSource);
     }
 
