@@ -8,7 +8,6 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -16,16 +15,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * What {@link ItemErasure} promises, asked of EVERY implementation — the JDBC adapter the service
- * runs on and each stand-in used in its place. This port has FOUR of them, which is three more
- * chances to drift.
+ * runs on and each stand-in used in its place. A stand-in that drifts does not fail; it makes a
+ * green suite say something about a service that does not exist.
  *
- * <p>A stand-in that drifts does not fail; it makes a green suite say something about a service
- * that does not exist. Both drifts this contract was written after were invisible: stand-ins
- * answering {@link ItemErasure#pendingSince} inclusively where the adapter asks
- * {@code marked_for_erasure_at < ?}, and stand-ins INVENTING a row on {@code store} where the
- * adapter runs an {@code UPDATE … WHERE} that quietly matches nothing.
- *
- * <p>Fresh names per test method, because one implementation is a database other suites share.
+ * <p>Fresh ids per test method, because one implementation is a database other suites share.
  */
 public abstract class ItemErasureContractTest {
 
@@ -33,18 +26,13 @@ public abstract class ItemErasureContractTest {
     private static final String LIST = "favourites";
 
     private final String run = UUID.randomUUID().toString().substring(0, 8);
-    private final String alice = "alice+" + run + "@example.com";
-    private final String bob = "bob+" + run + "@example.com";
+    private final UserId alice = UserId.random();
+    private final UserId bob = UserId.random();
 
     protected abstract ItemErasure erasure();
 
     /** Put an ACTIVE saved reference in, however this implementation stores one. */
-    protected abstract void givenSavedItem(String user, Optional<UserId> userId, String collection,
-                                           ItemRef ref);
-
-    private void givenSavedItem(String user, String collection, ItemRef ref) {
-        givenSavedItem(user, Optional.empty(), collection, ref);
-    }
+    protected abstract void givenSavedItem(UserId user, String collection, ItemRef ref);
 
     private ItemRef ref(String id) {
         return new ItemRef("meme", id + "-" + run);
@@ -72,49 +60,20 @@ public abstract class ItemErasureContractTest {
     }
 
     @Test
-    @DisplayName("the owner's id is read back exactly as it was saved, through every transition")
-    protected void the_id_round_trips() {
-        UserId aliceId = UserId.random();
-        givenSavedItem(alice, Optional.of(aliceId), LIST, ref("one"));
+    @DisplayName("the erasure destroys what was marked, of that member only")
+    protected void erase_marked_destroys_the_reserved_rows() {
+        givenSavedItem(alice, LIST, ref("one"));
+        givenSavedItem(alice, LIST, ref("kept"));
         givenSavedItem(bob, LIST, ref("two"));
+        erasure().store(theOnly(erasure().activeOf(bob)).markForErasure(NOON));
+        erasure().store(erasure().activeOf(alice).stream()
+                .filter(item -> item.ref().equals(ref("one"))).findFirst().orElseThrow().markForErasure(NOON));
 
-        assertEquals(Optional.of(aliceId), theOnly(erasure().activeOf(alice)).userId());
-        assertEquals(Optional.empty(), theOnly(erasure().activeOf(bob)).userId(),
-                "a row saved without an id has none to report");
+        assertEquals(1, erasure().eraseMarked(alice));
 
-        erasure().store(theOnly(erasure().activeOf(alice)).markForErasure(NOON));
-        assertEquals(Optional.of(aliceId), theOnly(erasure().pendingOf(alice)).userId());
-        assertEquals(Optional.of(aliceId), theOnly(erasure().pendingSince(NOON.plusSeconds(1))
-                .stream().filter(item -> item.user().equals(alice)).toList()).userId());
-    }
-
-    @Test
-    @DisplayName("by id: the rows carrying that id, whatever address they were written under")
-    protected void rows_are_found_by_the_owners_id() {
-        UserId aliceId = UserId.random();
-        givenSavedItem(alice, Optional.of(aliceId), LIST, ref("one"));
-        givenSavedItem("old+" + run + "@example.com", Optional.of(aliceId), LIST, ref("two"));
-        givenSavedItem(alice, Optional.of(UserId.random()), LIST, ref("three"));
-
-        assertEquals(2, erasure().activeOf(aliceId).size());
-        erasure().store(erasure().activeOf(aliceId).get(0).markForErasure(NOON));
-        assertEquals(1, erasure().pendingOf(aliceId).size());
-        assertEquals(1, erasure().eraseMarked(aliceId), "the marked row of that id goes, the other stays");
-        assertEquals(1, erasure().activeOf(aliceId).size());
-    }
-
-    @Test
-    @DisplayName("during the dual period the leaver is their id plus their id-less rows under the address")
-    protected void the_leaver_is_the_id_plus_the_rows_without_one() {
-        UserId aliceId = UserId.random();
-        givenSavedItem("old+" + run + "@example.com", Optional.of(aliceId), LIST, ref("one"));
-        givenSavedItem(alice, Optional.empty(), LIST, ref("two"));
-        givenSavedItem(alice, Optional.of(UserId.random()), LIST, ref("three"));
-
-        assertEquals(2, erasure().activeOf(alice, Optional.of(aliceId)).size(),
-                "the same address under another id is somebody else's");
-        assertEquals(2, erasure().activeOf(alice, Optional.empty()).size(),
-                "a closure without an id still goes by the address alone");
+        assertEquals(List.of(), erasure().pendingOf(alice));
+        assertEquals(ref("kept"), theOnly(erasure().activeOf(alice)).ref(), "the unmarked row stays");
+        assertEquals(1, erasure().pendingOf(bob).size(), "another member's mark is not this erasure's");
     }
 
     @Test

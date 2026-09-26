@@ -43,12 +43,10 @@ class JwtSecurityGateTest {
     }
 
     @Test
-    void accepts_a_valid_token_and_reads_the_user() throws Exception {
+    void a_token_with_the_address_as_subject_names_nobody() throws Exception {
         String token = token("k1", "microservice-security", "alice@example.com",
                 Instant.now().plusSeconds(3600), keys);
-        Caller caller = gate.callerFor(token).orElseThrow();
-        assertEquals("alice@example.com", caller.email());
-        assertEquals(Optional.empty(), caller.userId(), "an address as subject carries no id");
+        assertTrue(gate.callerFor(token).isEmpty(), "a token from before the cutover carries no id");
     }
 
     @Test
@@ -58,7 +56,7 @@ class JwtSecurityGateTest {
                 Instant.now().plusSeconds(3600), keys);
         Caller caller = gate.callerFor(token).orElseThrow();
         assertEquals("alice@example.com", caller.email());
-        assertEquals(Optional.of(new UserId(id)), caller.userId());
+        assertEquals(new UserId(id), caller.userId());
     }
 
     @Test

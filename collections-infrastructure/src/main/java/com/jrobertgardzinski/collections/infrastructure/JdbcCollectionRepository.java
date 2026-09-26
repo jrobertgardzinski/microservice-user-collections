@@ -11,10 +11,8 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Types;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 
 /**
  * The durable {@link CollectionRepository}: rows in {@code collection_items}, served by Postgres in prod
@@ -52,23 +50,18 @@ public class JdbcCollectionRepository implements CollectionRepository, ItemRefer
     }
 
     @Override
-    public boolean add(String user, Optional<UserId> userId, String collection, ItemRef item) {
+    public boolean add(UserId user, String collection, ItemRef item) {
         // INSERT names the table, not the view, and must: a view is not what a row is written to.
         // The UNIQUE constraint underneath spans rows of BOTH statuses, so saving something a
         // running saga has reserved is read as "already saved" rather than duplicated — see V3
         try (Connection c = dataSource.getConnection();
              PreparedStatement ps = c.prepareStatement(
-                     "INSERT INTO collection_items (user_email, user_id, collection, item_type, item_id) "
-                             + "VALUES (?, ?, ?, ?, ?)")) {
-            ps.setString(1, user);
-            if (userId.isPresent()) {
-                ps.setObject(2, userId.get().value());
-            } else {
-                ps.setNull(2, Types.OTHER);
-            }
-            ps.setString(3, collection);
-            ps.setString(4, item.itemType());
-            ps.setString(5, item.itemId());
+                     "INSERT INTO collection_items (user_id, collection, item_type, item_id) "
+                             + "VALUES (?, ?, ?, ?)")) {
+            ps.setObject(1, user.value());
+            ps.setString(2, collection);
+            ps.setString(3, item.itemType());
+            ps.setString(4, item.itemId());
             ps.executeUpdate();
             return true;
         } catch (SQLException e) {
@@ -80,7 +73,7 @@ public class JdbcCollectionRepository implements CollectionRepository, ItemRefer
     }
 
     @Override
-    public boolean remove(String user, String collection, ItemRef item) {
+    public boolean remove(UserId user, String collection, ItemRef item) {
         // the owner may only remove what the owner can SEE, which is why the status is part of the
         // key here. A reserved row is invisible in every listing, yet this DELETE used to destroy
         // it outright: a tab still showing yesterday's list (the access token stays valid for up to
@@ -88,9 +81,9 @@ public class JdbcCollectionRepository implements CollectionRepository, ItemRefer
         // had set aside, and a RESTORE that arrived afterwards had nothing left to put back
         try (Connection c = dataSource.getConnection();
              PreparedStatement ps = c.prepareStatement(
-                     "DELETE FROM collection_items WHERE user_email = ? AND collection = ? "
+                     "DELETE FROM collection_items WHERE user_id = ? AND collection = ? "
                              + "AND item_type = ? AND item_id = ? AND status = ?")) {
-            ps.setString(1, user);
+            ps.setObject(1, user.value());
             ps.setString(2, collection);
             ps.setString(3, item.itemType());
             ps.setString(4, item.itemId());
@@ -102,12 +95,12 @@ public class JdbcCollectionRepository implements CollectionRepository, ItemRefer
     }
 
     @Override
-    public List<ItemRef> list(String user, String collection) {
+    public List<ItemRef> list(UserId user, String collection) {
         try (Connection c = dataSource.getConnection();
              PreparedStatement ps = c.prepareStatement(
                      "SELECT item_type, item_id FROM active_collection_items "
-                             + "WHERE user_email = ? AND collection = ? ORDER BY id DESC")) {
-            ps.setString(1, user);
+                             + "WHERE user_id = ? AND collection = ? ORDER BY id DESC")) {
+            ps.setObject(1, user.value());
             ps.setString(2, collection);
             try (ResultSet rs = ps.executeQuery()) {
                 List<ItemRef> items = new ArrayList<>();

@@ -1,5 +1,6 @@
 package com.jrobertgardzinski.collections.appsteps;
 
+import static com.jrobertgardzinski.collections.application.TestUsers.u;
 import com.jrobertgardzinski.collections.domain.Observation;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jrobertgardzinski.observation.Observations;
@@ -45,12 +46,12 @@ public class CollectionsSteps {
     @When("^(\\w+) saves (\\w+) (\\d+) into \"([^\"]+)\"$")
     @Given("^(\\w+) has saved (\\w+) (\\d+) into \"([^\"]+)\"$")
     public void saves(String user, String type, String id, String collection) {
-        lastSave = saveItem.execute(user, collection, new ItemRef(type, id));
+        lastSave = saveItem.execute(u(user), collection, new ItemRef(type, id));
     }
 
     @When("^(\\w+) removes (\\w+) (\\d+) from \"([^\"]+)\"$")
     public void removes(String user, String type, String id, String collection) {
-        lastRemove = removeItem.execute(user, collection, new ItemRef(type, id));
+        lastRemove = removeItem.execute(u(user), collection, new ItemRef(type, id));
     }
 
     @When("^(\\w+)'s account is purged$")
@@ -62,23 +63,23 @@ public class CollectionsSteps {
         // so the suite proved the refusal of a malformed command and never the acceptance of a good
         // one. Living documentation that overstates its own reach is the failure this review kept
         // finding, and it is worst here, where the docs name the transport.
-        lastConfirmation = purgeConsumer.handle("{\"type\":\"PURGE_USER_CONTENT\",\"email\":\""
-                + user + "\",\"sagaId\":\"" + SAGA_ID + "\"}");
+        lastConfirmation = purgeConsumer.handle("{\"type\":\"PURGE_USER_CONTENT\",\"userId\":\""
+                + u(user) + "\",\"sagaId\":\"" + SAGA_ID + "\"}");
     }
 
     @When("^the ORCHESTRATOR compensates the SAGA$")
     public void orchestratorCompensates() {
         // RESTORE_USER_CONTENT: sent when a SIBLING participant failed. This service is not the one
         // that failed and does not get to decide — it only obeys
-        lastConfirmation = purgeConsumer.handle("{\"type\":\"RESTORE_USER_CONTENT\",\"email\":\""
-                + "alice\",\"sagaId\":\"" + SAGA_ID + "\"}");
+        lastConfirmation = purgeConsumer.handle("{\"type\":\"RESTORE_USER_CONTENT\",\"userId\":\""
+                + u("alice") + "\",\"sagaId\":\"" + SAGA_ID + "\"}");
     }
 
     @When("^the ORCHESTRATOR closes the SAGA$")
     public void orchestratorClosesTheSaga() {
         // ERASE_USER_CONTENT: the closure, and the only command that destroys anything here
-        lastConfirmation = purgeConsumer.handle("{\"type\":\"ERASE_USER_CONTENT\",\"email\":\""
-                + "alice\",\"sagaId\":\"" + SAGA_ID + "\"}");
+        lastConfirmation = purgeConsumer.handle("{\"type\":\"ERASE_USER_CONTENT\",\"userId\":\""
+                + u("alice") + "\",\"sagaId\":\"" + SAGA_ID + "\"}");
     }
 
     @Then("^a late compensation brings nothing back$")
@@ -86,14 +87,14 @@ public class CollectionsSteps {
         // the orchestrator never sends this after a closure — its state machine forbids it — but if
         // one did arrive, past the closure there is nothing reserved to restore and nothing to throw
         orchestratorCompensates();
-        assertTrue(store.list("alice", "favourites").isEmpty(),
+        assertTrue(store.list(u("alice"), "favourites").isEmpty(),
                 "erased is erased: a compensation cannot resurrect what the closure deleted");
     }
 
     @When("^a purge command arrives naming nobody$")
     public void purgeCommandNamingNobody() {
         lastConfirmation = purgeConsumer.handle(
-                "{\"type\":\"PURGE_USER_CONTENT\",\"email\":\"\",\"sagaId\":\"saga-nobody\"}");
+                "{\"type\":\"PURGE_USER_CONTENT\",\"userId\":\"\",\"sagaId\":\"saga-nobody\"}");
     }
 
     @Then("^a CONFIRMATION for that SAGA goes back to the ORCHESTRATOR$")
@@ -139,12 +140,12 @@ public class CollectionsSteps {
 
     @Then("^(\\w+)'s \"([^\"]+)\" contains (\\w+) (\\d+)$")
     public void contains(String user, String collection, String type, String id) {
-        assertTrue(listItems.execute(user, collection).contains(new ItemRef(type, id)));
+        assertTrue(listItems.execute(u(user), collection).contains(new ItemRef(type, id)));
     }
 
     @Then("^(\\w+)'s \"([^\"]+)\" contains (\\w+) (\\d+) once$")
     public void containsOnce(String user, String collection, String type, String id) {
-        long times = listItems.execute(user, collection).stream()
+        long times = listItems.execute(u(user), collection).stream()
                 .filter(new ItemRef(type, id)::equals).count();
         assertEquals(1, times);
     }
@@ -152,13 +153,13 @@ public class CollectionsSteps {
     @Then("^(\\w+)'s \"([^\"]+)\" lists (\\w+) (\\d+) then (\\w+) (\\d+)$")
     public void listsInOrder(String user, String collection,
                              String firstType, String firstId, String secondType, String secondId) {
-        List<ItemRef> items = listItems.execute(user, collection);
+        List<ItemRef> items = listItems.execute(u(user), collection);
         assertEquals(new ItemRef(firstType, firstId), items.get(0));
         assertEquals(new ItemRef(secondType, secondId), items.get(1));
     }
 
     @Then("^(\\w+)'s \"([^\"]+)\" is empty$")
     public void isEmpty(String user, String collection) {
-        assertTrue(listItems.execute(user, collection).isEmpty());
+        assertTrue(listItems.execute(u(user), collection).isEmpty());
     }
 }

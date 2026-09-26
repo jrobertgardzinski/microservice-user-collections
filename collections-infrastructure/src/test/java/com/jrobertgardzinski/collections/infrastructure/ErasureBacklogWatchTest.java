@@ -1,5 +1,7 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
+import static com.jrobertgardzinski.collections.application.TestUsers.u;
+import com.jrobertgardzinski.identity.UserId;
 import com.jrobertgardzinski.collections.application.InMemoryCollectionRepository;
 import com.jrobertgardzinski.collections.domain.Observation;
 import ch.qos.logback.classic.Logger;
@@ -40,7 +42,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Feature("Erasure backlog alarm")
 class ErasureBacklogWatchTest {
 
-    private static final String LEAVER = "leaver@example.com";
+    private static final UserId LEAVER = u("leaver@example.com");
     private static final Instant MARKED_AT = Instant.parse("2026-08-08T10:00:00Z");
 
     private final InMemoryCollectionRepository store = new InMemoryCollectionRepository();
@@ -103,7 +105,7 @@ class ErasureBacklogWatchTest {
                 "the operator has to be told what state the data is in: " + said);
         assertTrue(said.contains("delete them on a timer"),
                 "and that nothing will fix it by itself — that is the whole design: " + said);
-        assertFalse(said.contains(LEAVER),
+        assertFalse(said.contains(LEAVER.toString()),
                 "but never the address: the owners of these rows are exactly the people this"
                         + " service is trying to forget — " + said);
     }
@@ -125,13 +127,10 @@ class ErasureBacklogWatchTest {
     @DisplayName("a register that cannot be read keeps its last value instead of reporting zero")
     void an_unreadable_backlog_is_loud_not_reassuring() {
         ItemErasure unreadable = new ItemErasure() {
-            public List<SavedItem> activeOf(String user) { return List.of(); }
-            public List<SavedItem> pendingOf(String user) { return List.of(); }
             public void store(SavedItem state) { }
-            public int eraseMarked(String user) { return 0; }
-            public List<SavedItem> activeOf(com.jrobertgardzinski.identity.UserId user) { return List.of(); }
-            public List<SavedItem> pendingOf(com.jrobertgardzinski.identity.UserId user) { return List.of(); }
-            public int eraseMarked(com.jrobertgardzinski.identity.UserId user) { return 0; }
+            public List<SavedItem> activeOf(UserId user) { return List.of(); }
+            public List<SavedItem> pendingOf(UserId user) { return List.of(); }
+            public int eraseMarked(UserId user) { return 0; }
 
             public List<SavedItem> pendingSince(Instant cutoff) {
                 throw new IllegalStateException("database away");

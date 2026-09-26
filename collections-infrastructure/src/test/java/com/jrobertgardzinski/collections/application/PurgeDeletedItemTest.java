@@ -1,5 +1,6 @@
 package com.jrobertgardzinski.collections.application;
 
+import static com.jrobertgardzinski.collections.application.TestUsers.u;
 import com.jrobertgardzinski.collections.domain.ItemRef;
 import io.qameta.allure.Epic;
 import io.qameta.allure.Feature;
@@ -36,16 +37,16 @@ class PurgeDeletedItemTest {
 
     @Test
     void it_removes_the_deleted_item_from_every_user_and_every_collection() {
-        store.add("alice@example.com", "favourites", new ItemRef("meme", "m-1"));
-        store.add("alice@example.com", "watchlist", new ItemRef("meme", "m-1"));
-        store.add("bob@example.com", "favourites", new ItemRef("meme", "m-1"));
+        store.add(u("alice@example.com"), "favourites", new ItemRef("meme", "m-1"));
+        store.add(u("alice@example.com"), "watchlist", new ItemRef("meme", "m-1"));
+        store.add(u("bob@example.com"), "favourites", new ItemRef("meme", "m-1"));
 
         assertEquals(3, purge.execute("meme", List.of("m-1")),
                 "the count is what the log reports — all three refs went");
 
-        assertTrue(store.list("alice@example.com", "favourites").isEmpty());
-        assertTrue(store.list("alice@example.com", "watchlist").isEmpty());
-        assertTrue(store.list("bob@example.com", "favourites").isEmpty(),
+        assertTrue(store.list(u("alice@example.com"), "favourites").isEmpty());
+        assertTrue(store.list(u("alice@example.com"), "watchlist").isEmpty());
+        assertTrue(store.list(u("bob@example.com"), "favourites").isEmpty(),
                 "the cascade is not scoped to one user — that is its whole point");
     }
 
@@ -53,23 +54,23 @@ class PurgeDeletedItemTest {
     void it_takes_nobody_elses_refs_with_it() {
         // the neighbours a wrong WHERE clause would eat: same id under another type, same type
         // under another id, and a ref that merely happens to live beside the doomed one
-        store.add("alice@example.com", "favourites", new ItemRef("meme", "shared-id"));
-        store.add("alice@example.com", "favourites", new ItemRef("comment", "shared-id"));
-        store.add("alice@example.com", "favourites", new ItemRef("meme", "another"));
-        store.add("bob@example.com", "watchlist", new ItemRef("comment", "shared-id"));
+        store.add(u("alice@example.com"), "favourites", new ItemRef("meme", "shared-id"));
+        store.add(u("alice@example.com"), "favourites", new ItemRef("comment", "shared-id"));
+        store.add(u("alice@example.com"), "favourites", new ItemRef("meme", "another"));
+        store.add(u("bob@example.com"), "watchlist", new ItemRef("comment", "shared-id"));
 
         assertEquals(1, purge.execute("meme", List.of("shared-id")));
 
         assertEquals(List.of(new ItemRef("comment", "shared-id"), new ItemRef("meme", "another")),
-                sorted(store.list("alice@example.com", "favourites")),
+                sorted(store.list(u("alice@example.com"), "favourites")),
                 "only the (meme, shared-id) ref may go: the type is half the key");
         assertEquals(List.of(new ItemRef("comment", "shared-id")),
-                store.list("bob@example.com", "watchlist"));
+                store.list(u("bob@example.com"), "watchlist"));
     }
 
     @Test
     void running_it_again_removes_nothing_and_raises_nothing() {
-        store.add("alice@example.com", "favourites", new ItemRef("comment", "c-1"));
+        store.add(u("alice@example.com"), "favourites", new ItemRef("comment", "c-1"));
 
         assertEquals(1, purge.execute("comment", List.of("c-1")));
         assertEquals(0, purge.execute("comment", List.of("c-1")),
@@ -84,16 +85,16 @@ class PurgeDeletedItemTest {
 
     @Test
     void a_batch_removes_exactly_the_named_ids() {
-        store.add("alice@example.com", "favourites", new ItemRef("comment", "c-1"));
-        store.add("alice@example.com", "favourites", new ItemRef("comment", "c-2"));
-        store.add("bob@example.com", "favourites", new ItemRef("comment", "c-2"));
-        store.add("bob@example.com", "favourites", new ItemRef("comment", "c-3"));
+        store.add(u("alice@example.com"), "favourites", new ItemRef("comment", "c-1"));
+        store.add(u("alice@example.com"), "favourites", new ItemRef("comment", "c-2"));
+        store.add(u("bob@example.com"), "favourites", new ItemRef("comment", "c-2"));
+        store.add(u("bob@example.com"), "favourites", new ItemRef("comment", "c-3"));
 
         assertEquals(3, purge.execute("comment", List.of("c-1", "c-2")));
 
-        assertTrue(store.list("alice@example.com", "favourites").isEmpty());
+        assertTrue(store.list(u("alice@example.com"), "favourites").isEmpty());
         assertEquals(List.of(new ItemRef("comment", "c-3")),
-                store.list("bob@example.com", "favourites"),
+                store.list(u("bob@example.com"), "favourites"),
                 "c-3 was not in the event, so it stays");
     }
 
@@ -101,7 +102,7 @@ class PurgeDeletedItemTest {
     void blanks_and_duplicates_in_one_event_cost_nothing() {
         // an at-least-once producer merging two batches may well name the same comment twice,
         // and a null in the array is a producer bug we absorb rather than crash on
-        store.add("alice@example.com", "favourites", new ItemRef("comment", "c-1"));
+        store.add(u("alice@example.com"), "favourites", new ItemRef("comment", "c-1"));
 
         assertEquals(1, purge.execute("comment", withNull("c-1", "c-1", "", "  ")),
                 "the ref goes exactly once, and the noise is dropped before the store sees it");

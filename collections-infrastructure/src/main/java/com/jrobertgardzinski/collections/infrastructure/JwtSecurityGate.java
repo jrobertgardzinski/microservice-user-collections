@@ -31,6 +31,7 @@ final class JwtSecurityGate implements SecurityGate {
     @Override
     public Optional<Caller> callerFor(String accessToken) {
         return verifier.verify(accessToken)
-                .map(verified -> new Caller(verified.email(), Caller.userIdFrom(verified.subject())));
+                .flatMap(verified -> Caller.userIdFrom(verified.subject())
+                        .map(id -> new Caller(verified.email(), id)));
     }
 }

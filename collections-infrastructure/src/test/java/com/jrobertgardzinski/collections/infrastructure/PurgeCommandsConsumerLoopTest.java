@@ -1,5 +1,7 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
+import static com.jrobertgardzinski.collections.application.TestUsers.u;
+import com.jrobertgardzinski.identity.UserId;
 import com.jrobertgardzinski.collections.application.InMemoryCollectionRepository;
 import com.jrobertgardzinski.collections.closure.CollectionsClosureParticipant;
 import ch.qos.logback.classic.Level;
@@ -67,9 +69,9 @@ class PurgeCommandsConsumerLoopTest {
     private static final TopicPartition PARTITION =
             new TopicPartition(PurgeCommandsConsumer.COMMANDS_TOPIC, 0);
     private static final String PURGE_ALICE =
-            "{\"type\":\"PURGE_USER_CONTENT\",\"email\":\"alice@example.com\",\"sagaId\":\"s-1\"}";
+            "{\"type\":\"PURGE_USER_CONTENT\",\"userId\":\"" + u("alice@example.com") + "\",\"sagaId\":\"s-1\"}";
     private static final String PURGE_BOB =
-            "{\"type\":\"PURGE_USER_CONTENT\",\"email\":\"bob@example.com\",\"sagaId\":\"s-2\"}";
+            "{\"type\":\"PURGE_USER_CONTENT\",\"userId\":\"" + u("bob@example.com") + "\",\"sagaId\":\"s-2\"}";
     private static final long TEST_BACKOFF_MILLIS = 5;   // the seam's third argument: retries in
                                                          // milliseconds, not the production second
 
@@ -120,7 +122,7 @@ class PurgeCommandsConsumerLoopTest {
 
     @Test
     void a_processed_record_is_confirmed_before_its_offset_commits() throws Exception {
-        store.add("alice@example.com", "favourites", new ItemRef("meme", "42"));
+        store.add(u("alice@example.com"), "favourites", new ItemRef("meme", "42"));
         MockProducer<String, String> producer =
                 new MockProducer<>(true, null, new StringSerializer(), new StringSerializer());
         // capture, at the exact commit that covers the record, how many confirmations the
@@ -150,7 +152,7 @@ class PurgeCommandsConsumerLoopTest {
         Header cid = confirmation.headers().lastHeader(PurgeCommandsConsumer.CID_HEADER);
         assertNotNull(cid, "the correlation id must ride out on the confirmation");
         assertEquals("cid-42", new String(cid.value(), StandardCharsets.UTF_8));
-        assertTrue(store.list("alice@example.com", "favourites").isEmpty(), "purged");
+        assertTrue(store.list(u("alice@example.com"), "favourites").isEmpty(), "purged");
         assertEquals(1, confirmationsWhenOffsetCommitted.get(),
                 "the confirmation must reach the broker BEFORE the offset commits");
     }
@@ -165,7 +167,7 @@ class PurgeCommandsConsumerLoopTest {
      */
     @Test
     void the_confirmation_is_keyed_by_the_saga_never_by_the_leavers_address() throws Exception {
-        store.add("alice@example.com", "favourites", new ItemRef("meme", "42"));
+        store.add(u("alice@example.com"), "favourites", new ItemRef("meme", "42"));
         MockProducer<String, String> producer =
                 new MockProducer<>(true, null, new StringSerializer(), new StringSerializer());
         MockConsumer<String, String> consumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST);
@@ -187,7 +189,7 @@ class PurgeCommandsConsumerLoopTest {
     @Test
     void a_store_failure_inside_the_budget_commits_nothing_and_the_loop_retries_after_backoff()
             throws Exception {
-        store.add("alice@example.com", "favourites", new ItemRef("meme", "42"));
+        store.add(u("alice@example.com"), "favourites", new ItemRef("meme", "42"));
         MockProducer<String, String> producer =
                 new MockProducer<>(true, null, new StringSerializer(), new StringSerializer());
         MockConsumer<String, String> consumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST);
@@ -196,7 +198,7 @@ class PurgeCommandsConsumerLoopTest {
         // the throwing decorator: the first purge finds the database away, every later one works
         ItemErasure failingOnce = new DelegatingErasure(store) {
             @Override
-            public List<SavedItem> activeOf(String user) {
+            public List<SavedItem> activeOf(UserId user) {
                 if (failuresLeft.getAndDecrement() > 0) {
                     committedWhenStoreFailed.set(committedOffset(consumer));
                     // MockConsumer.poll() cleared the batch; re-add it so the loop's rewind to
@@ -216,7 +218,7 @@ class PurgeCommandsConsumerLoopTest {
         assertEquals(-1, committedWhenStoreFailed.get(),
                 "a failed batch must not have been committed");
         assertEquals(1, producer.history().size(), "one confirmation, after the retry");
-        assertTrue(store.list("alice@example.com", "favourites").isEmpty(), "purged on retry");
+        assertTrue(store.list(u("alice@example.com"), "favourites").isEmpty(), "purged on retry");
         assertTrue(loopThread.isAlive(), "an infrastructure failure must not kill the loop");
         assertEquals(0, observations.recordsDropped(),
                 "a hiccup healed well inside the retry budget must drop nothing: the budget only"
@@ -225,7 +227,7 @@ class PurgeCommandsConsumerLoopTest {
 
     @Test
     void an_interrupt_mid_send_ends_the_loop_instead_of_being_swallowed() throws Exception {
-        store.add("alice@example.com", "favourites", new ItemRef("meme", "42"));
+        store.add(u("alice@example.com"), "favourites", new ItemRef("meme", "42"));
         // autoComplete=false: send().get() blocks forever — the exact spot where the raw
         // InterruptedException used to be eaten by the generic retry catch
         MockProducer<String, String> producer =
@@ -250,7 +252,7 @@ class PurgeCommandsConsumerLoopTest {
                 new MockProducer<>(true, null, new StringSerializer(), new StringSerializer());
         MockConsumer<String, String> consumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST);
         prime(consumer, command(0,
-                "{\"type\":\"PURGE_USER_CONTENT\",\"email\":\"\",\"sagaId\":\"s-9\"}"));
+                "{\"type\":\"PURGE_USER_CONTENT\",\"userId\":\"\",\"sagaId\":\"s-9\"}"));
 
         startLoop(consumerUnderTest(store), consumer, producer);
         await("the dropped command's offset to commit", () -> committedOffset(consumer) >= 1);
@@ -262,7 +264,7 @@ class PurgeCommandsConsumerLoopTest {
 
     @Test
     void a_permanently_failing_store_keeps_alive_green_while_health_stalls() throws Exception {
-        store.add("alice@example.com", "favourites", new ItemRef("meme", "42"));
+        store.add(u("alice@example.com"), "favourites", new ItemRef("meme", "42"));
         MockProducer<String, String> producer =
                 new MockProducer<>(true, null, new StringSerializer(), new StringSerializer());
         MockConsumer<String, String> consumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST);
@@ -272,7 +274,7 @@ class PurgeCommandsConsumerLoopTest {
         // while the record's deadline is still far away — the drop that follows it has its own test
         ItemErasure alwaysFailing = new DelegatingErasure(store) {
             @Override
-            public List<SavedItem> activeOf(String user) {
+            public List<SavedItem> activeOf(UserId user) {
                 failures.incrementAndGet();
                 consumer.schedulePollTask(() -> consumer.addRecord(command(0, PURGE_ALICE)));
                 throw new IllegalStateException("database permanently away");
@@ -302,14 +304,14 @@ class PurgeCommandsConsumerLoopTest {
         // collections database that came back half an hour later purged the collections of an
         // account the saga had long since compensated and handed back to its owner — with no
         // signal to him or to an operator. The budget ends the retrying while the saga still cares.
-        store.add("alice@example.com", "favourites", new ItemRef("meme", "42"));
+        store.add(u("alice@example.com"), "favourites", new ItemRef("meme", "42"));
         MockProducer<String, String> producer =
                 new MockProducer<>(true, null, new StringSerializer(), new StringSerializer());
         MockConsumer<String, String> consumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST);
         AtomicInteger failures = new AtomicInteger();
         ItemErasure alwaysFailing = new DelegatingErasure(store) {
             @Override
-            public List<SavedItem> activeOf(String user) {
+            public List<SavedItem> activeOf(UserId user) {
                 failures.incrementAndGet();
                 consumer.schedulePollTask(() -> consumer.addRecord(command(0, PURGE_ALICE)));
                 // the message carries the address on purpose: the drop line must not repeat it
@@ -358,16 +360,16 @@ class PurgeCommandsConsumerLoopTest {
         // failing in turn — alice, then bob, then alice — handed each failure a fresh budget,
         // so neither was ever abandoned and a purge could still land minutes after the
         // orchestrator had compensated and given the account back.
-        store.add("alice@example.com", "favourites", new ItemRef("meme", "42"));
-        store.add("bob@example.com", "favourites", new ItemRef("meme", "99"));
+        store.add(u("alice@example.com"), "favourites", new ItemRef("meme", "42"));
+        store.add(u("bob@example.com"), "favourites", new ItemRef("meme", "99"));
         MockProducer<String, String> producer =
                 new MockProducer<>(true, null, new StringSerializer(), new StringSerializer());
         MockConsumer<String, String> consumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST);
         AtomicInteger aliceAttempts = new AtomicInteger();
         ItemErasure flapping = new DelegatingErasure(store) {
             @Override
-            public List<SavedItem> activeOf(String user) {
-                boolean failing = user.startsWith("bob")
+            public List<SavedItem> activeOf(UserId user) {
+                boolean failing = user.equals(u("bob@example.com"))
                         || aliceAttempts.getAndIncrement() % 2 == 0;   // alice fails every other try
                 if (!failing) {
                     return super.activeOf(user);
@@ -405,7 +407,7 @@ class PurgeCommandsConsumerLoopTest {
         // the other half of the fix: the budget bounds the handling of a RECORD. A failure with no
         // consumed record behind it — a commit, a poll, the broker probe — keeps retrying for ever,
         // because there is no purge in flight whose lateness could hurt anybody.
-        store.add("alice@example.com", "favourites", new ItemRef("meme", "42"));
+        store.add(u("alice@example.com"), "favourites", new ItemRef("meme", "42"));
         MockProducer<String, String> producer =
                 new MockProducer<>(true, null, new StringSerializer(), new StringSerializer());
         AtomicInteger commits = new AtomicInteger();
@@ -597,14 +599,14 @@ class PurgeCommandsConsumerLoopTest {
         Duration tolerance = Duration.ofMillis(500);
         int records = 10;
         long perRecordMillis = 100;   // 10 x 100ms = one healthy batch twice the tolerance long
-        store.add("alice@example.com", "favourites", new ItemRef("meme", "42"));
+        store.add(u("alice@example.com"), "favourites", new ItemRef("meme", "42"));
         MockProducer<String, String> producer =
                 new MockProducer<>(true, null, new StringSerializer(), new StringSerializer());
         AtomicReference<PurgeCommandsConsumer> loop = new AtomicReference<>();
         List<Boolean> readyWhileHandling = new CopyOnWriteArrayList<>();
         ItemErasure slowStore = new DelegatingErasure(store) {
             @Override
-            public List<SavedItem> activeOf(String user) {
+            public List<SavedItem> activeOf(UserId user) {
                 // the work one command really pays — a database round trip and, after it, the
                 // confirmation's ack — made long enough to see without waiting out a real one
                 sleepFor(perRecordMillis);
@@ -718,35 +720,23 @@ class PurgeCommandsConsumerLoopTest {
         }
 
         @Override
-        public List<SavedItem> activeOf(String user) {
+        public List<SavedItem> activeOf(UserId user) {
             return delegate.activeOf(user);
         }
 
         @Override
-        public List<SavedItem> pendingOf(String user) {
+        public List<SavedItem> pendingOf(UserId user) {
             return delegate.pendingOf(user);
         }
 
-        public List<SavedItem> activeOf(com.jrobertgardzinski.identity.UserId user) {
-            return List.of();
-        }
-
-        public List<SavedItem> pendingOf(com.jrobertgardzinski.identity.UserId user) {
-            return List.of();
-        }
-
-        public int eraseMarked(com.jrobertgardzinski.identity.UserId user) {
-            return 0;
+        @Override
+        public int eraseMarked(UserId user) {
+            return delegate.eraseMarked(user);
         }
 
         @Override
         public void store(SavedItem state) {
             delegate.store(state);
-        }
-
-        @Override
-        public int eraseMarked(String user) {
-            return delegate.eraseMarked(user);
         }
 
         @Override

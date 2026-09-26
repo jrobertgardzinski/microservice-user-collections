@@ -5,7 +5,6 @@ import com.jrobertgardzinski.collections.application.ItemErasureContractTest;
 import com.jrobertgardzinski.collections.domain.ItemRef;
 import com.jrobertgardzinski.identity.UserId;
 
-import java.util.Optional;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import io.qameta.allure.Epic;
@@ -48,7 +47,7 @@ class JdbcItemErasureTest extends ItemErasureContractTest {
     }
 
     @Override
-    protected void givenSavedItem(String user, Optional<UserId> userId, String collection, ItemRef ref) {
-        store.add(user, userId, collection, ref);
+    protected void givenSavedItem(UserId user, String collection, ItemRef ref) {
+        store.add(user, collection, ref);
     }
 }

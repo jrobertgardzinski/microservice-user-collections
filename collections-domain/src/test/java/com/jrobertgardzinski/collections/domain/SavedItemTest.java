@@ -9,7 +9,6 @@ import java.time.Duration;
 import com.jrobertgardzinski.identity.UserId;
 
 import java.time.Instant;
-import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -30,8 +29,10 @@ class SavedItemTest {
     private static final Instant FIRST_DELIVERY = Instant.parse("2026-08-08T10:00:00Z");
     private static final Instant REDELIVERY = FIRST_DELIVERY.plus(Duration.ofHours(1));
 
+    private static final UserId LEAVER = UserId.random();
+
     private static SavedItem inTheList() {
-        return new SavedItem("leaver@example.com", "favourites", new ItemRef("meme", "42"));
+        return new SavedItem(LEAVER, "favourites", new ItemRef("meme", "42"));
     }
 
     @Test
@@ -44,17 +45,6 @@ class SavedItemTest {
         assertFalse(item.isPendingErasure());
     }
 
-    @Test
-    @DisplayName("the owner's id survives both transitions")
-    void the_id_travels_with_the_row() {
-        UserId leaver = UserId.random();
-        SavedItem item = new SavedItem("leaver@example.com", Optional.of(leaver), "favourites",
-                new ItemRef("meme", "42"), ItemStatus.ACTIVE, null);
-
-        assertEquals(Optional.of(leaver), item.markForErasure(FIRST_DELIVERY).userId());
-        assertEquals(Optional.of(leaver), item.markForErasure(FIRST_DELIVERY).restore().userId());
-        assertEquals(Optional.empty(), inTheList().userId(), "a row without an id stays without one");
-    }
 
     @Test
     @DisplayName("marking reserves the reference and records when")
@@ -101,8 +91,8 @@ class SavedItemTest {
     void the_invariant_is_unrepresentable_not_merely_discouraged() {
         ItemRef ref = new ItemRef("meme", "42");
         assertThrows(IllegalArgumentException.class,
-                () -> new SavedItem("a@b.c", "favourites", ref, ItemStatus.PENDING_ERASURE, null));
+                () -> new SavedItem(LEAVER, "favourites", ref, ItemStatus.PENDING_ERASURE, null));
         assertThrows(IllegalArgumentException.class,
-                () -> new SavedItem("a@b.c", "favourites", ref, ItemStatus.ACTIVE, FIRST_DELIVERY));
+                () -> new SavedItem(LEAVER, "favourites", ref, ItemStatus.ACTIVE, FIRST_DELIVERY));
     }
 }

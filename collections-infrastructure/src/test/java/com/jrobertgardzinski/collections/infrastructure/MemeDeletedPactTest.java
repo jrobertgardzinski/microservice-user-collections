@@ -1,5 +1,6 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
+import static com.jrobertgardzinski.collections.application.TestUsers.u;
 import au.com.dius.pact.consumer.MessagePactBuilder;
 import au.com.dius.pact.consumer.dsl.PactDslJsonBody;
 import au.com.dius.pact.consumer.junit5.PactConsumerTestExt;
@@ -82,15 +83,15 @@ class MemeDeletedPactTest {
     @PactTestFor(pactMethod = "memeDeleted")
     @DisplayName("the announcement memes publishes takes every saved reference to the dead meme")
     void every_reference_to_the_deleted_meme_goes(List<Message> messages) {
-        store.add("alice@example.com", "favourites", new ItemRef("meme", MEME));
-        store.add("bob@example.com", "watchlist", new ItemRef("meme", MEME));
+        store.add(u("alice@example.com"), "favourites", new ItemRef("meme", MEME));
+        store.add(u("bob@example.com"), "watchlist", new ItemRef("meme", MEME));
 
         int removed = cascade.handle(CascadeConsumer.MEMES_TOPIC,
                 messages.get(0).contentsAsString());
 
         assertEquals(2, removed, "the real consumer, driven by the pact's own payload");
-        assertTrue(store.list("alice@example.com", "favourites").isEmpty());
-        assertTrue(store.list("bob@example.com", "watchlist").isEmpty());
+        assertTrue(store.list(u("alice@example.com"), "favourites").isEmpty());
+        assertTrue(store.list(u("bob@example.com"), "watchlist").isEmpty());
     }
 
     @Test

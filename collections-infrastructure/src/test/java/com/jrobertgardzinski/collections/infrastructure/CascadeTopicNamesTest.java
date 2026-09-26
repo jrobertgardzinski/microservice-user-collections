@@ -1,5 +1,6 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
+import static com.jrobertgardzinski.collections.application.TestUsers.u;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jrobertgardzinski.collections.application.InMemoryCollectionRepository;
 import com.jrobertgardzinski.collections.application.PurgeDeletedItem;
@@ -103,8 +104,8 @@ class CascadeTopicNamesTest {
     void the_topic_is_half_of_each_event_contract() {
         // the mirror of the subscription check, from the handler's side: the type alone is never
         // enough, so a producer that keeps the type and moves the topic changes nothing here
-        store.add("alice@example.com", "favourites", new ItemRef("meme", MEME));
-        store.add("alice@example.com", "favourites", new ItemRef("comment", COMMENT));
+        store.add(u("alice@example.com"), "favourites", new ItemRef("meme", MEME));
+        store.add(u("alice@example.com"), "favourites", new ItemRef("comment", COMMENT));
 
         assertEquals(0, cascade.handle("memes-events-v2",
                 "{\"type\":\"MEME_DELETED\",\"memeId\":\"" + MEME + "\",\"eventId\":\"e-1\"}"));
@@ -114,8 +115,8 @@ class CascadeTopicNamesTest {
                         + "\",\"commentIds\":[\"" + COMMENT + "\"],\"version\":1}"));
 
         assertTrue(List.of(new ItemRef("meme", MEME), new ItemRef("comment", COMMENT))
-                        .containsAll(store.list("alice@example.com", "favourites")),
+                        .containsAll(store.list(u("alice@example.com"), "favourites")),
                 "nothing may be purged on the strength of a type alone");
-        assertEquals(2, store.list("alice@example.com", "favourites").size());
+        assertEquals(2, store.list(u("alice@example.com"), "favourites").size());
     }
 }

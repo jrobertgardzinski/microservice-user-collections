@@ -7,7 +7,6 @@ import com.jrobertgardzinski.collections.application.ListItems;
 import com.jrobertgardzinski.collections.application.PurgeDeletedItem;
 import com.jrobertgardzinski.collections.application.MarkUserItemsForErasure;
 import com.jrobertgardzinski.collections.application.PurgeUserItems;
-import com.jrobertgardzinski.collections.application.RekeyUserItems;
 import com.jrobertgardzinski.collections.application.RestoreUserItems;
 import com.jrobertgardzinski.collections.application.RemoveItem;
 import com.jrobertgardzinski.collections.application.SaveItem;
@@ -290,9 +289,6 @@ public final class Main {
         // the erasure-aware side of the same table, and the ONLY adapter here allowed to read a
         // row the account-deletion saga has reserved (ADR 0007)
         JdbcItemErasure erasure = new JdbcItemErasure(dataSource);
-        // the same table along its THIRD axis: not a reference and not a reservation, but the one
-        // column that says whose row this is — and the one that moves when a member's address does
-        JdbcUserItemsRekey rekey = new JdbcUserItemsRekey(dataSource);
         SecurityGate gate = new JwtSecurityGate(securityUrl);
 
         // the composition root's one watcher: everything that states a fact is handed THIS, and
@@ -308,7 +304,6 @@ public final class Main {
         // and then /health has no loop to distrust (dev, tests: always OK)
         String bootstrap = System.getenv().getOrDefault("KAFKA_BOOTSTRAP_SERVERS", "").trim();
         PurgeCommandsConsumer purgeConsumer = null;
-        SecurityEventsConsumer rekeyConsumer = null;
         if (!bootstrap.isEmpty()) {
             PurgeCommandsConsumer consumer = new PurgeCommandsConsumer(
                     new MarkUserItemsForErasure(erasure, Clock.systemUTC()),
@@ -347,24 +342,14 @@ public final class Main {
             Thread cascadeThread = Thread.ofVirtual().name("cascade-consumer")
                     .start(() -> cascade.run(bootstrap));
 
-            // the THIRD loop: renames off security-events. Watched by both probes like the saga
-            // consumer and unlike the cascade — a stalled cleanup is cleanup debt, while a stalled
-            // rename has this instance answering one member's reads under a name they have left
-            SecurityEventsConsumer rekeyEvents =
-                    new SecurityEventsConsumer(new RekeyUserItems(rekey), new ObjectMapper());
-            Thread rekeyThread = Thread.ofVirtual().name("security-events-consumer")
-                    .start(() -> rekeyEvents.run(bootstrap));
-            rekeyConsumer = rekeyEvents;
-
             // every loop here is written around an interrupt, and until recently nobody ever
             // delivered one: the JVM took the daemon threads down mid-poll, KafkaConsumer.close()
             // never ran and no group was left, so every restart of this service began with
             // ~session.timeout.ms of nobody consuming content-commands — a saga hop delayed for
             // the length of a deploy. The orchestrator has registered this hook all along
-            registerStopHook(purgeThread, cascadeThread, rekeyThread);
+            registerStopHook(purgeThread, cascadeThread);
         }
         PurgeCommandsConsumer watchedConsumer = purgeConsumer;
-        SecurityEventsConsumer watchedRekey = rekeyConsumer;
         Duration consumerStall = requiredConsumerStall("COLLECTIONS_CONSUMER_STALL_SEC",
                 Duration.ofSeconds(stallSeconds("COLLECTIONS_CONSUMER_STALL_SEC",
                         System.getenv().getOrDefault("COLLECTIONS_CONSUMER_STALL_SEC",
@@ -396,8 +381,6 @@ public final class Main {
                             // acting on the same probe)
                             if (watchedConsumer != null && !watchedConsumer.healthy(consumerStall)) {
                                 res.status(503).send("purge consumer stalled");
-                            } else if (watchedRekey != null && !watchedRekey.healthy(consumerStall)) {
-                                res.status(503).send("security events consumer stalled");
                             } else {
                                 res.send("OK");
                             }
@@ -411,8 +394,6 @@ public final class Main {
                             // route (or alert) on
                             if (watchedConsumer != null && !watchedConsumer.alive(aliveStall)) {
                                 res.status(503).send("purge consumer thread stalled");
-                            } else if (watchedRekey != null && !watchedRekey.alive(aliveStall)) {
-                                res.status(503).send("security events consumer thread stalled");
                             } else {
                                 res.send("OK");
                             }

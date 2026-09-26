@@ -20,7 +20,6 @@ class FakeGate implements SecurityGate {
         if (accessToken == null || accessToken.isBlank()) {
             return Optional.empty();
         }
-        UUID id = UUID.nameUUIDFromBytes(accessToken.getBytes(StandardCharsets.UTF_8));
-        return Optional.of(new Caller(accessToken, Optional.of(new UserId(id))));
+        return Optional.of(new Caller(accessToken, com.jrobertgardzinski.collections.application.TestUsers.u(accessToken)));
     }
 }

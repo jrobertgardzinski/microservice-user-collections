@@ -42,7 +42,7 @@ class CollectionsApiEdgeCasesTest {
         InMemoryCollectionRepository store = new InMemoryCollectionRepository();
         // only the one known token resolves — anything else is the gate saying "nobody"
         SecurityGate gate = token -> VALID_TOKEN.equals(token)
-                ? Optional.of(new Caller("alice@example.com", Optional.empty())) : Optional.empty();
+                ? Optional.of(new Caller("alice@example.com", com.jrobertgardzinski.identity.UserId.random())) : Optional.empty();
         CollectionsApi api = new CollectionsApi(
                 new SaveItem(store), new RemoveItem(store), new ListItems(store), gate);
         server = WebServer.builder()

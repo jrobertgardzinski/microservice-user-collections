@@ -1,5 +1,6 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
+import static com.jrobertgardzinski.collections.application.TestUsers.u;
 import com.jrobertgardzinski.collections.application.InMemoryCollectionRepository;
 import com.jrobertgardzinski.collections.closure.CollectionsClosureParticipant;
 import com.jrobertgardzinski.collections.domain.Observation;
@@ -72,27 +73,27 @@ class PurgeCommandsConsumerTest {
 
     @Test
     void a_purge_command_clears_the_user_and_confirms() throws Exception {
-        store.add("alice@example.com", "favourites", new ItemRef("meme", "42"));
-        store.add("alice@example.com", "watchlist", new ItemRef("comment", "7"));
+        store.add(u("alice@example.com"), "favourites", new ItemRef("meme", "42"));
+        store.add(u("alice@example.com"), "watchlist", new ItemRef("comment", "7"));
 
         Optional<String> confirmation = consumer.handle(
-                "{\"type\":\"PURGE_USER_CONTENT\",\"email\":\"alice@example.com\",\"sagaId\":\"s-1\"}");
+                "{\"type\":\"PURGE_USER_CONTENT\",\"userId\":\"" + u("alice@example.com") + "\",\"sagaId\":\"s-1\"}");
 
-        assertTrue(store.list("alice@example.com", "favourites").isEmpty(), "collections purged");
-        assertTrue(store.list("alice@example.com", "watchlist").isEmpty());
+        assertTrue(store.list(u("alice@example.com"), "favourites").isEmpty(), "collections purged");
+        assertTrue(store.list(u("alice@example.com"), "watchlist").isEmpty());
 
         JsonNode event = mapper.readTree(confirmation.orElseThrow());
         assertEquals("USER_CONTENT_PURGED", event.path("type").asText());
         assertEquals("s-1", event.path("sagaId").asText());
-        assertEquals("alice@example.com", event.path("email").asText());
+        assertEquals(u("alice@example.com").toString(), event.path("userId").asText());
     }
 
     @Test
     void a_command_of_another_type_is_ignored() {
-        store.add("alice@example.com", "favourites", new ItemRef("meme", "42"));
+        store.add(u("alice@example.com"), "favourites", new ItemRef("meme", "42"));
 
-        assertTrue(consumer.handle("{\"type\":\"SOMETHING_ELSE\",\"email\":\"alice@example.com\"}").isEmpty());
-        assertEquals(1, store.list("alice@example.com", "favourites").size(), "nothing purged");
+        assertTrue(consumer.handle("{\"type\":\"SOMETHING_ELSE\",\"userId\":\"" + u("alice@example.com") + "\"}").isEmpty());
+        assertEquals(1, store.list(u("alice@example.com"), "favourites").size(), "nothing purged");
     }
 
     @Test
@@ -117,10 +118,10 @@ class PurgeCommandsConsumerTest {
 
     @Test
     void a_successful_purge_logs_the_saga_id_never_the_email() {
-        store.add("alice@example.com", "favourites", new ItemRef("meme", "42"));
+        store.add(u("alice@example.com"), "favourites", new ItemRef("meme", "42"));
 
         consumer.handle(
-                "{\"type\":\"PURGE_USER_CONTENT\",\"email\":\"alice@example.com\",\"sagaId\":\"s-7\"}");
+                "{\"type\":\"PURGE_USER_CONTENT\",\"userId\":\"" + u("alice@example.com") + "\",\"sagaId\":\"s-7\"}");
 
         assertTrue(logLines.list.stream().anyMatch(event ->
                         event.getFormattedMessage().contains("s-7")),
@@ -142,13 +143,13 @@ class PurgeCommandsConsumerTest {
         PurgeCommandsConsumer participant = new PurgeCommandsConsumer(
                 new MarkUserItemsForErasure(store, java.time.Clock.systemUTC()),
                 new RestoreUserItems(store), new PurgeUserItems(store), mapper, observations);
-        store.add("alice@example.com", "favourites", new ItemRef("meme", "42"));
+        store.add(u("alice@example.com"), "favourites", new ItemRef("meme", "42"));
         participant.handle(
-                "{\"type\":\"PURGE_USER_CONTENT\",\"email\":\"alice@example.com\",\"sagaId\":\"s-9\"}");
-        store.add("alice@example.com", "favourites", new ItemRef("meme", "43"));
+                "{\"type\":\"PURGE_USER_CONTENT\",\"userId\":\"" + u("alice@example.com") + "\",\"sagaId\":\"s-9\"}");
+        store.add(u("alice@example.com"), "favourites", new ItemRef("meme", "43"));
 
         participant.handle(
-                "{\"type\":\"ERASE_USER_CONTENT\",\"email\":\"alice@example.com\",\"sagaId\":\"s-9\"}");
+                "{\"type\":\"ERASE_USER_CONTENT\",\"userId\":\"" + u("alice@example.com") + "\",\"sagaId\":\"s-9\"}");
 
         assertEquals(1, observations.erasureResidue(),
                 "one reference is standing under an address this service has just erased, and"
@@ -172,34 +173,34 @@ class PurgeCommandsConsumerTest {
         PurgeCommandsConsumer participant = new PurgeCommandsConsumer(
                 new MarkUserItemsForErasure(store, java.time.Clock.systemUTC()),
                 new RestoreUserItems(store), new PurgeUserItems(store), mapper, observations);
-        store.add("alice@example.com", "favourites", new ItemRef("meme", "42"));
+        store.add(u("alice@example.com"), "favourites", new ItemRef("meme", "42"));
         participant.handle(
-                "{\"type\":\"PURGE_USER_CONTENT\",\"email\":\"alice@example.com\",\"sagaId\":\"s-9\"}");
+                "{\"type\":\"PURGE_USER_CONTENT\",\"userId\":\"" + u("alice@example.com") + "\",\"sagaId\":\"s-9\"}");
 
         participant.handle(
-                "{\"type\":\"ERASE_USER_CONTENT\",\"email\":\"alice@example.com\",\"sagaId\":\"s-9\"}");
+                "{\"type\":\"ERASE_USER_CONTENT\",\"userId\":\"" + u("alice@example.com") + "\",\"sagaId\":\"s-9\"}");
         // the redelivery every saga command must survive — and by now the address may belong to
         // somebody else, whose list is not a leaver's residue
-        store.add("alice@example.com", "favourites", new ItemRef("meme", "77"));
+        store.add(u("alice@example.com"), "favourites", new ItemRef("meme", "77"));
         participant.handle(
-                "{\"type\":\"ERASE_USER_CONTENT\",\"email\":\"alice@example.com\",\"sagaId\":\"s-9\"}");
+                "{\"type\":\"ERASE_USER_CONTENT\",\"userId\":\"" + u("alice@example.com") + "\",\"sagaId\":\"s-9\"}");
 
         assertEquals(0, observations.erasureResidue(),
                 "an alarm that goes off for the ordinary deletion, or for a second delivery of the"
                         + " same closure, is an alarm nobody reads");
-        assertEquals(1, store.list("alice@example.com", "favourites").size(),
+        assertEquals(1, store.list(u("alice@example.com"), "favourites").size(),
                 "and the closure still destroys only what the mark reserved");
     }
 
     @Test
     void a_purge_command_without_an_email_is_dropped_without_a_confirmation() {
-        store.add("alice@example.com", "favourites", new ItemRef("meme", "42"));
+        store.add(u("alice@example.com"), "favourites", new ItemRef("meme", "42"));
 
         assertTrue(consumer.handle("{\"type\":\"PURGE_USER_CONTENT\",\"sagaId\":\"s-2\"}").isEmpty(),
                 "a missing email must not produce a confirmation");
         assertTrue(consumer.handle(
-                        "{\"type\":\"PURGE_USER_CONTENT\",\"email\":\"\",\"sagaId\":\"s-3\"}").isEmpty(),
+                        "{\"type\":\"PURGE_USER_CONTENT\",\"userId\":\"\",\"sagaId\":\"s-3\"}").isEmpty(),
                 "an empty email must not produce a confirmation");
-        assertEquals(1, store.list("alice@example.com", "favourites").size(), "nothing purged");
+        assertEquals(1, store.list(u("alice@example.com"), "favourites").size(), "nothing purged");
     }
 }

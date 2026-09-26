@@ -1,5 +1,6 @@
 package com.jrobertgardzinski.collections.application;
 
+import com.jrobertgardzinski.identity.UserId;
 import com.jrobertgardzinski.collections.domain.ItemRef;
 
 import java.util.List;
@@ -16,7 +17,7 @@ public class ListItems {
         this.store = store;
     }
 
-    public List<ItemRef> execute(String user, String collection) {
+    public List<ItemRef> execute(UserId user, String collection) {
         return store.list(user, collection);
     }
 }

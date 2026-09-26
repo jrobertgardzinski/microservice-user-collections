@@ -1,5 +1,6 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
+import static com.jrobertgardzinski.collections.application.TestUsers.u;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
@@ -71,34 +72,34 @@ class CascadeConsumerTest {
 
     @Test
     void a_deleted_meme_loses_every_users_reference_to_it() {
-        store.add("alice@example.com", "favourites", new ItemRef("meme", MEME));
-        store.add("bob@example.com", "watchlist", new ItemRef("meme", MEME));
+        store.add(u("alice@example.com"), "favourites", new ItemRef("meme", MEME));
+        store.add(u("bob@example.com"), "watchlist", new ItemRef("meme", MEME));
 
         assertEquals(2, cascade.handle(CascadeConsumer.MEMES_TOPIC, memeDeleted(MEME)));
 
-        assertTrue(store.list("alice@example.com", "favourites").isEmpty());
-        assertTrue(store.list("bob@example.com", "watchlist").isEmpty());
+        assertTrue(store.list(u("alice@example.com"), "favourites").isEmpty());
+        assertTrue(store.list(u("bob@example.com"), "watchlist").isEmpty());
     }
 
     @Test
     void a_deleted_meme_does_not_take_the_comment_that_shares_its_id() {
         // the two sources mint ids independently, so a collision is possible and the item_type is
         // the only thing standing between a meme's deletion and somebody's saved comment
-        store.add("alice@example.com", "favourites", new ItemRef("meme", MEME));
-        store.add("alice@example.com", "favourites", new ItemRef("comment", MEME));
-        store.add("alice@example.com", "favourites", new ItemRef("meme", COMMENT_1));
+        store.add(u("alice@example.com"), "favourites", new ItemRef("meme", MEME));
+        store.add(u("alice@example.com"), "favourites", new ItemRef("comment", MEME));
+        store.add(u("alice@example.com"), "favourites", new ItemRef("meme", COMMENT_1));
 
         assertEquals(1, cascade.handle(CascadeConsumer.MEMES_TOPIC, memeDeleted(MEME)));
 
-        assertEquals(2, store.list("alice@example.com", "favourites").size(),
+        assertEquals(2, store.list(u("alice@example.com"), "favourites").size(),
                 "only the (meme, " + MEME + ") ref may go");
-        assertTrue(store.list("alice@example.com", "favourites")
+        assertTrue(store.list(u("alice@example.com"), "favourites")
                 .contains(new ItemRef("comment", MEME)));
     }
 
     @Test
     void the_same_meme_deletion_twice_is_free() {
-        store.add("alice@example.com", "favourites", new ItemRef("meme", MEME));
+        store.add(u("alice@example.com"), "favourites", new ItemRef("meme", MEME));
 
         assertEquals(1, cascade.handle(CascadeConsumer.MEMES_TOPIC, memeDeleted(MEME)));
         assertEquals(0, cascade.handle(CascadeConsumer.MEMES_TOPIC, memeDeleted(MEME)),
@@ -109,39 +110,39 @@ class CascadeConsumerTest {
 
     @Test
     void deleted_comments_lose_exactly_the_refs_the_event_names() {
-        store.add("alice@example.com", "favourites", new ItemRef("comment", COMMENT_1));
-        store.add("bob@example.com", "favourites", new ItemRef("comment", COMMENT_1));
-        store.add("bob@example.com", "favourites", new ItemRef("comment", COMMENT_2));
-        store.add("bob@example.com", "favourites", new ItemRef("comment", COMMENT_3));
-        store.add("bob@example.com", "favourites", new ItemRef("meme", COMMENT_1));
+        store.add(u("alice@example.com"), "favourites", new ItemRef("comment", COMMENT_1));
+        store.add(u("bob@example.com"), "favourites", new ItemRef("comment", COMMENT_1));
+        store.add(u("bob@example.com"), "favourites", new ItemRef("comment", COMMENT_2));
+        store.add(u("bob@example.com"), "favourites", new ItemRef("comment", COMMENT_3));
+        store.add(u("bob@example.com"), "favourites", new ItemRef("meme", COMMENT_1));
 
         assertEquals(3, cascade.handle(CascadeConsumer.COMMENTS_TOPIC,
                 commentsDeleted(MEME, COMMENT_1, COMMENT_2)));
 
-        assertTrue(store.list("alice@example.com", "favourites").isEmpty());
+        assertTrue(store.list(u("alice@example.com"), "favourites").isEmpty());
         assertEquals(List.of(new ItemRef("meme", COMMENT_1), new ItemRef("comment", COMMENT_3)),
-                store.list("bob@example.com", "favourites"),
+                store.list(u("bob@example.com"), "favourites"),
                 "the unnamed comment and the meme that shares an id both stay");
     }
 
     @Test
     void a_comments_deleted_with_an_empty_list_removes_nothing_and_raises_nothing() {
-        store.add("alice@example.com", "favourites", new ItemRef("comment", COMMENT_1));
+        store.add(u("alice@example.com"), "favourites", new ItemRef("comment", COMMENT_1));
 
         assertEquals(0, cascade.handle(CascadeConsumer.COMMENTS_TOPIC, commentsDeleted(MEME)));
-        assertEquals(1, store.list("alice@example.com", "favourites").size());
+        assertEquals(1, store.list(u("alice@example.com"), "favourites").size());
     }
 
     @Test
     void unusable_ids_inside_a_comments_deleted_are_skipped_and_the_rest_still_go() {
-        store.add("alice@example.com", "favourites", new ItemRef("comment", COMMENT_1));
+        store.add(u("alice@example.com"), "favourites", new ItemRef("comment", COMMENT_1));
 
         assertEquals(1, cascade.handle(CascadeConsumer.COMMENTS_TOPIC,
                 "{\"id\":\"e-1\",\"type\":\"COMMENTS_DELETED\",\"memeId\":\"" + MEME
                         + "\",\"commentIds\":[\"" + COMMENT_1 + "\",\"\",\"not-an-id\"],"
                         + "\"version\":1}"));
 
-        assertTrue(store.list("alice@example.com", "favourites").isEmpty());
+        assertTrue(store.list(u("alice@example.com"), "favourites").isEmpty());
         assertTrue(warned("are not ids and were skipped"),
                 "the operator must learn the producer sent garbage");
         assertFalse(logged("not-an-id"),
@@ -152,18 +153,18 @@ class CascadeConsumerTest {
 
     @Test
     void a_foreign_event_type_on_either_topic_is_ignored_without_a_word() {
-        store.add("alice@example.com", "favourites", new ItemRef("meme", MEME));
-        store.add("alice@example.com", "favourites", new ItemRef("comment", COMMENT_1));
+        store.add(u("alice@example.com"), "favourites", new ItemRef("meme", MEME));
+        store.add(u("alice@example.com"), "favourites", new ItemRef("comment", COMMENT_1));
 
         assertEquals(0, cascade.handle(CascadeConsumer.MEMES_TOPIC,
                 "{\"type\":\"MEME_UPLOADED\",\"memeId\":\"" + MEME + "\"}"));
         assertEquals(0, cascade.handle(CascadeConsumer.COMMENTS_TOPIC,
                 "{\"type\":\"USER_CONTENT_PURGED\",\"sagaId\":\"s-1\","
-                        + "\"email\":\"leaver@example.com\",\"version\":1}"));
+                        + "\"userId\":\"" + u("leaver@example.com") + "\",\"version\":1}"));
         assertEquals(0, cascade.handle(CascadeConsumer.COMMENTS_TOPIC,
                 "{\"type\":\"COMMENT_POSTED\",\"memeId\":\"" + MEME + "\"}"));
 
-        assertEquals(2, store.list("alice@example.com", "favourites").size(), "nothing purged");
+        assertEquals(2, store.list(u("alice@example.com"), "favourites").size(), "nothing purged");
         assertTrue(logLines.list.isEmpty(),
                 "these topics carry other conversations all day — a line per foreign event would"
                         + " bury the ones that matter. Logged: " + messages());
@@ -175,7 +176,7 @@ class CascadeConsumerTest {
         // neither act on them nor echo the leaver's address while ignoring them
         cascade.handle(CascadeConsumer.COMMENTS_TOPIC,
                 "{\"type\":\"USER_CONTENT_PURGED\",\"sagaId\":\"s-1\","
-                        + "\"email\":\"leaver@example.com\",\"version\":1}");
+                        + "\"userId\":\"" + u("leaver@example.com") + "\",\"version\":1}");
 
         assertFalse(logged("leaver@example.com"), "PII must not reach a log line");
     }
@@ -183,12 +184,12 @@ class CascadeConsumerTest {
     @Test
     void an_event_of_the_right_type_on_the_wrong_topic_is_not_ours() {
         // the topic is half the contract: COMMENTS_DELETED means comments only on comments-events
-        store.add("alice@example.com", "favourites", new ItemRef("comment", COMMENT_1));
+        store.add(u("alice@example.com"), "favourites", new ItemRef("comment", COMMENT_1));
 
         assertEquals(0, cascade.handle(CascadeConsumer.MEMES_TOPIC,
                 commentsDeleted(MEME, COMMENT_1)));
         assertEquals(0, cascade.handle(CascadeConsumer.COMMENTS_TOPIC, memeDeleted(MEME)));
-        assertEquals(1, store.list("alice@example.com", "favourites").size());
+        assertEquals(1, store.list(u("alice@example.com"), "favourites").size());
     }
 
     // ---- poison pills ----
@@ -205,7 +206,7 @@ class CascadeConsumerTest {
 
     @Test
     void a_meme_deleted_without_a_usable_id_is_dropped_with_a_warning() {
-        store.add("alice@example.com", "favourites", new ItemRef("meme", MEME));
+        store.add(u("alice@example.com"), "favourites", new ItemRef("meme", MEME));
 
         assertEquals(0, cascade.handle(CascadeConsumer.MEMES_TOPIC,
                 "{\"type\":\"MEME_DELETED\",\"eventId\":\"e-1\"}"), "no memeId at all");
@@ -214,7 +215,7 @@ class CascadeConsumerTest {
         assertEquals(0, cascade.handle(CascadeConsumer.MEMES_TOPIC, memeDeleted("42")),
                 "an id off-contract: the event says uuid");
 
-        assertEquals(1, store.list("alice@example.com", "favourites").size(),
+        assertEquals(1, store.list(u("alice@example.com"), "favourites").size(),
                 "a purge with nothing to purge must never turn into a purge of everything");
         assertEquals(4, logLines.list.stream()
                         .filter(line -> line.getFormattedMessage().contains("MEME_DELETED whose"))
@@ -226,13 +227,13 @@ class CascadeConsumerTest {
     void a_comments_deleted_without_a_usable_meme_id_is_dropped_with_a_warning() {
         // the memeId is the cascade's only handle in the log; an event without one cannot be
         // audited afterwards, so it is off-contract even though the comment ids look fine
-        store.add("alice@example.com", "favourites", new ItemRef("comment", COMMENT_1));
+        store.add(u("alice@example.com"), "favourites", new ItemRef("comment", COMMENT_1));
 
         assertEquals(0, cascade.handle(CascadeConsumer.COMMENTS_TOPIC,
                 "{\"id\":\"e-1\",\"type\":\"COMMENTS_DELETED\",\"commentIds\":[\"" + COMMENT_1
                         + "\"],\"version\":1}"));
 
-        assertEquals(1, store.list("alice@example.com", "favourites").size());
+        assertEquals(1, store.list(u("alice@example.com"), "favourites").size());
         assertTrue(warned("COMMENTS_DELETED whose memeId"), messages().toString());
     }
 
@@ -246,8 +247,8 @@ class CascadeConsumerTest {
 
     @Test
     void a_successful_cascade_logs_the_meme_id_and_the_number_of_refs() {
-        store.add("alice@example.com", "favourites", new ItemRef("meme", MEME));
-        store.add("bob@example.com", "favourites", new ItemRef("meme", MEME));
+        store.add(u("alice@example.com"), "favourites", new ItemRef("meme", MEME));
+        store.add(u("bob@example.com"), "favourites", new ItemRef("meme", MEME));
 
         cascade.handle(CascadeConsumer.MEMES_TOPIC, memeDeleted(MEME));
 
@@ -261,7 +262,7 @@ class CascadeConsumerTest {
 
     @Test
     void a_comments_cascade_logs_the_meme_it_belonged_to() {
-        store.add("alice@example.com", "favourites", new ItemRef("comment", COMMENT_1));
+        store.add(u("alice@example.com"), "favourites", new ItemRef("comment", COMMENT_1));
 
         cascade.handle(CascadeConsumer.COMMENTS_TOPIC, commentsDeleted(MEME, COMMENT_1));
 

@@ -4,12 +4,10 @@ import com.jrobertgardzinski.identity.UserId;
 
 import java.util.Optional;
 
-/**
- * Who is making a request, as security's token says: the address, and the id when the token's
- * subject is one (older tokens carry the address as subject and no id).
- */
-public record Caller(String email, Optional<UserId> userId) {
+/** Who is making a request, as security's token says: the identity, and the address beside it. */
+public record Caller(String email, UserId userId) {
 
+    /** Empty when the subject is not an id: a token from before the cutover names nobody here. */
     static Optional<UserId> userIdFrom(String subject) {
         try {
             return Optional.of(UserId.of(subject));

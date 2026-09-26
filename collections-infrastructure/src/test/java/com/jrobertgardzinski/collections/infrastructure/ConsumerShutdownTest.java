@@ -5,7 +5,6 @@ import com.jrobertgardzinski.collections.application.InMemoryCollectionRepositor
 import com.jrobertgardzinski.collections.application.MarkUserItemsForErasure;
 import com.jrobertgardzinski.collections.application.PurgeDeletedItem;
 import com.jrobertgardzinski.collections.application.PurgeUserItems;
-import com.jrobertgardzinski.collections.application.RekeyUserItems;
 import com.jrobertgardzinski.collections.application.RestoreUserItems;
 import com.jrobertgardzinski.collections.domain.Observation;
 import com.jrobertgardzinski.observation.Observations;
@@ -60,23 +59,17 @@ class ConsumerShutdownTest {
         MockConsumer<String, String> purgeClient = new MockConsumer<>(OffsetResetStrategy.EARLIEST);
         MockConsumer<String, String> cascadeClient =
                 new MockConsumer<>(OffsetResetStrategy.EARLIEST);
-        MockConsumer<String, String> rekeyClient =
-                new MockConsumer<>(OffsetResetStrategy.EARLIEST);
         MockProducer<String, String> producer =
                 new MockProducer<>(true, null, new StringSerializer(), new StringSerializer());
         PurgeCommandsConsumer purge = new PurgeCommandsConsumer(
                 new MarkUserItemsForErasure(store, Clock.systemUTC()), new RestoreUserItems(store),
                 new PurgeUserItems(store), mapper, Observations.<Observation>silent());
         CascadeConsumer cascade = new CascadeConsumer(new PurgeDeletedItem(store), mapper);
-        SecurityEventsConsumer rekey = new SecurityEventsConsumer(
-                new RekeyUserItems((oldEmail, newEmail) -> 0), mapper);
         // the shape Main gives them: a loop inside a try-with-resources, on its own thread
         Thread purgeThread = loop("purge-consumer", purgeClient, () -> purge.run(purgeClient, producer));
         Thread cascadeThread = loop("cascade-consumer", cascadeClient, () -> cascade.run(cascadeClient));
-        Thread rekeyThread =
-                loop("security-events-consumer", rekeyClient, () -> rekey.run(rekeyClient));
 
-        Thread hook = Main.registerStopHook(purgeThread, cascadeThread, rekeyThread);
+        Thread hook = Main.registerStopHook(purgeThread, cascadeThread);
 
         assertTrue(Runtime.getRuntime().removeShutdownHook(hook),
                 "the stop must be registered WITH THE JVM, or nothing ever delivers the interrupt"
@@ -89,9 +82,6 @@ class ConsumerShutdownTest {
                 + " leaves the group instead of making the next start wait out session.timeout.ms");
         assertTrue(cascadeClient.closed(), "and the cascade consumer's client too — it has a group"
                 + " of its own to leave");
-        assertFalse(rekeyThread.isAlive(), "and the rename consumer, the third and newest loop —"
-                + " the one a hook that took two named threads would have left running");
-        assertTrue(rekeyClient.closed(), "with its own group left behind it as well");
     }
 
     @Test

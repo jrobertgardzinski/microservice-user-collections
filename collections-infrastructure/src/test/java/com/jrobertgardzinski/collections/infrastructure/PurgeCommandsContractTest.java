@@ -1,5 +1,7 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
+import static com.jrobertgardzinski.collections.application.TestUsers.u;
+import com.jrobertgardzinski.identity.UserId;
 import com.jrobertgardzinski.collections.application.InMemoryCollectionRepository;
 import com.jrobertgardzinski.collections.domain.Observation;
 import au.com.dius.pact.consumer.MessagePactBuilder;
@@ -51,7 +53,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
         pactVersion = PactSpecVersion.V3)
 class PurgeCommandsContractTest {
 
-    private static final String LEAVER = "leaver@example.com";
+    private static final UserId LEAVER = u("leaver@example.com");
 
     private final InMemoryCollectionRepository store = new InMemoryCollectionRepository();
     private final PurgeCommandsConsumer consumer = new PurgeCommandsConsumer(
@@ -64,8 +66,7 @@ class PurgeCommandsContractTest {
                 .withContent(new PactDslJsonBody()
                         .stringValue("type", "PURGE_USER_CONTENT")
                         .uuid("sagaId")
-                        .stringType("email", LEAVER)
-                        .uuid("userId"))
+                        .uuid("userId", LEAVER.value()))
                 .toPact();
     }
 
@@ -75,8 +76,7 @@ class PurgeCommandsContractTest {
                 .withContent(new PactDslJsonBody()
                         .stringValue("type", "ERASE_USER_CONTENT")
                         .uuid("sagaId")
-                        .stringType("email", LEAVER)
-                        .uuid("userId"))
+                        .uuid("userId", LEAVER.value()))
                 .toPact();
     }
 
@@ -86,8 +86,7 @@ class PurgeCommandsContractTest {
                 .withContent(new PactDslJsonBody()
                         .stringValue("type", "RESTORE_USER_CONTENT")
                         .uuid("sagaId")
-                        .stringType("email", LEAVER)
-                        .uuid("userId"))
+                        .uuid("userId", LEAVER.value()))
                 .toPact();
     }
 

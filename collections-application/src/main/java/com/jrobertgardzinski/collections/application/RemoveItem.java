@@ -1,5 +1,6 @@
 package com.jrobertgardzinski.collections.application;
 
+import com.jrobertgardzinski.identity.UserId;
 import com.jrobertgardzinski.collections.domain.ItemRef;
 
 /**
@@ -16,7 +17,7 @@ public class RemoveItem {
         this.store = store;
     }
 
-    public Status execute(String user, String collection, ItemRef item) {
+    public Status execute(UserId user, String collection, ItemRef item) {
         return store.remove(user, collection, item) ? Status.REMOVED : Status.NOT_SAVED;
     }
 }

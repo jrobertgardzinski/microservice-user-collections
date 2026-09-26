@@ -1,6 +1,5 @@
 package com.jrobertgardzinski.collections.application;
 
-import java.util.Optional;
 import com.jrobertgardzinski.identity.UserId;
 /**
  * The IRREVERSIBLE half of the account-deletion axis for this service: everything the leaver saved
@@ -50,16 +49,12 @@ public class PurgeUserItems {
         this.erasure = erasure;
     }
 
-    public Closure execute(String user) {
-        return execute(user, Optional.empty());
-    }
-
-    public Closure execute(String user, Optional<UserId> userId) {
-        int erased = erasure.eraseMarked(user, userId);
+    public Closure execute(UserId user) {
+        int erased = erasure.eraseMarked(user);
         // asked only of the delivery that actually closed a saga. A redelivery reserves nothing and
         // erases nothing, and counting then would report whatever that address holds today — which
         // after a re-registration is a different person's list — as a leaver's residue
-        int leftBehind = erased == 0 ? 0 : erasure.activeOf(user, userId).size();
+        int leftBehind = erased == 0 ? 0 : erasure.activeOf(user).size();
         return new Closure(erased, leftBehind);
     }
 }

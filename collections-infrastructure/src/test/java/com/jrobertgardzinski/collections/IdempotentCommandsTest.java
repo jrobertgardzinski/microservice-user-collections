@@ -1,5 +1,6 @@
 package com.jrobertgardzinski.collections;
 
+import static com.jrobertgardzinski.collections.application.TestUsers.u;
 import com.jrobertgardzinski.collections.application.MarkUserItemsForErasure;
 import com.jrobertgardzinski.collections.application.PurgeDeletedItem;
 import com.jrobertgardzinski.collections.application.PurgeUserItems;
@@ -50,29 +51,29 @@ class IdempotentCommandsTest {
     private static Map<String, Consumer<InMemoryCollectionRepository>> commands() {
         Map<String, Consumer<InMemoryCollectionRepository>> c = new LinkedHashMap<>();
         c.put("save into an empty collection",
-                store -> new SaveItem(store).execute("alice", "favourites", MEME_42));
+                store -> new SaveItem(store).execute(u("alice"), "favourites", MEME_42));
         c.put("save what is already there",
-                store -> new SaveItem(store).execute("alice", "watchlist", COMMENT_7));
+                store -> new SaveItem(store).execute(u("alice"), "watchlist", COMMENT_7));
         c.put("remove what is there",
-                store -> new RemoveItem(store).execute("alice", "watchlist", COMMENT_7));
+                store -> new RemoveItem(store).execute(u("alice"), "watchlist", COMMENT_7));
         c.put("remove what is not there",
-                store -> new RemoveItem(store).execute("alice", "favourites", COMMENT_7));
+                store -> new RemoveItem(store).execute(u("alice"), "favourites", COMMENT_7));
         c.put("mark the account for erasure",
-                store -> new MarkUserItemsForErasure(store, CLOCK).execute("alice"));
+                store -> new MarkUserItemsForErasure(store, CLOCK).execute(u("alice")));
         c.put("compensate a marked account",
                 store -> {
-                    new MarkUserItemsForErasure(store, CLOCK).execute("alice");
-                    new RestoreUserItems(store).execute("alice");
+                    new MarkUserItemsForErasure(store, CLOCK).execute(u("alice"));
+                    new RestoreUserItems(store).execute(u("alice"));
                 });
         c.put("close the saga on a marked account",
                 store -> {
-                    new MarkUserItemsForErasure(store, CLOCK).execute("alice");
-                    new PurgeUserItems(store).execute("alice");
+                    new MarkUserItemsForErasure(store, CLOCK).execute(u("alice"));
+                    new PurgeUserItems(store).execute(u("alice"));
                 });
         c.put("close a saga that marked nothing",
-                store -> new PurgeUserItems(store).execute("alice"));
+                store -> new PurgeUserItems(store).execute(u("alice")));
         c.put("compensate a saga that marked nothing",
-                store -> new RestoreUserItems(store).execute("alice"));
+                store -> new RestoreUserItems(store).execute(u("alice")));
         c.put("purge a deleted item everyone's collections may point at",
                 store -> new PurgeDeletedItem(store).execute("comment", List.of("7")));
         c.put("purge a deleted item nobody saved",
@@ -82,8 +83,8 @@ class IdempotentCommandsTest {
 
     private static InMemoryCollectionRepository seeded() {
         InMemoryCollectionRepository store = new InMemoryCollectionRepository();
-        store.add("alice", "watchlist", COMMENT_7);
-        store.add("bob", "favourites", MEME_42);   // a bystander no command may disturb
+        store.add(u("alice"), "watchlist", COMMENT_7);
+        store.add(u("bob"), "favourites", MEME_42);   // a bystander no command may disturb
         return store;
     }
 
@@ -97,7 +98,7 @@ class IdempotentCommandsTest {
         Map<String, Object> f = new LinkedHashMap<>();
         for (String user : new String[] {"alice", "bob"}) {
             for (String collection : new String[] {"favourites", "watchlist"}) {
-                f.put(user + "/" + collection, store.list(user, collection));
+                f.put(user + "/" + collection, store.list(u(user), collection));
             }
         }
         f.put("marks", store.marks());

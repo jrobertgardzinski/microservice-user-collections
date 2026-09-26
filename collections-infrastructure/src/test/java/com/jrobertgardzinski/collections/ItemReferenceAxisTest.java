@@ -1,5 +1,6 @@
 package com.jrobertgardzinski.collections;
 
+import static com.jrobertgardzinski.collections.application.TestUsers.u;
 import com.jrobertgardzinski.collections.domain.ItemRef;
 import com.jrobertgardzinski.collections.infrastructure.JdbcCollectionRepository;
 import com.zaxxer.hikari.HikariConfig;
@@ -73,31 +74,31 @@ class ItemReferenceAxisTest {
         // own index, and a migration that "tidied" it away would be invisible until a leaver left.
         // More than one index may lead with user_email (the UNIQUE constraint does too), so the
         // claim is that V1's is among them
-        assertTrue(indexesLeadingWith("user_email").contains("idx_collection_items_user"),
-                "the user axis must still have V1's own index after V2, found: "
-                        + indexesLeadingWith("user_email"));
+        assertTrue(indexesLeadingWith("user_id").contains("idx_collection_items_user"),
+                "the user axis keeps its own index, found: "
+                        + indexesLeadingWith("user_id"));
     }
 
     @Test
     void purging_an_item_takes_every_users_ref_to_it_and_nothing_else() {
-        store.add("alice", "favourites", new ItemRef("meme", "m-1"));
-        store.add("alice", "watchlist", new ItemRef("meme", "m-1"));
-        store.add("bob", "favourites", new ItemRef("meme", "m-1"));
-        store.add("bob", "favourites", new ItemRef("comment", "m-1"));   // same id, other type
-        store.add("bob", "favourites", new ItemRef("meme", "m-2"));      // other id, same type
+        store.add(u("alice"), "favourites", new ItemRef("meme", "m-1"));
+        store.add(u("alice"), "watchlist", new ItemRef("meme", "m-1"));
+        store.add(u("bob"), "favourites", new ItemRef("meme", "m-1"));
+        store.add(u("bob"), "favourites", new ItemRef("comment", "m-1"));   // same id, other type
+        store.add(u("bob"), "favourites", new ItemRef("meme", "m-2"));      // other id, same type
 
         assertEquals(3, store.purge("meme", List.of("m-1")));
 
-        assertTrue(store.list("alice", "favourites").isEmpty());
-        assertTrue(store.list("alice", "watchlist").isEmpty());
+        assertTrue(store.list(u("alice"), "favourites").isEmpty());
+        assertTrue(store.list(u("alice"), "watchlist").isEmpty());
         assertEquals(List.of(new ItemRef("meme", "m-2"), new ItemRef("comment", "m-1")),
-                store.list("bob", "favourites"),
+                store.list(u("bob"), "favourites"),
                 "the (comment, m-1) and (meme, m-2) refs are not the deleted meme");
     }
 
     @Test
     void purging_an_item_twice_removes_nothing_the_second_time() {
-        store.add("alice", "favourites", new ItemRef("comment", "c-1"));
+        store.add(u("alice"), "favourites", new ItemRef("comment", "c-1"));
 
         assertEquals(1, store.purge("comment", List.of("c-1")));
         assertEquals(0, store.purge("comment", List.of("c-1")),
@@ -112,13 +113,13 @@ class ItemReferenceAxisTest {
         for (int i = 0; i < 1_200; i++) {
             String id = "c-" + i;
             ids.add(id);
-            store.add("alice", "favourites", new ItemRef("comment", id));
+            store.add(u("alice"), "favourites", new ItemRef("comment", id));
         }
-        store.add("alice", "favourites", new ItemRef("meme", "kept"));
+        store.add(u("alice"), "favourites", new ItemRef("meme", "kept"));
 
         assertEquals(1_200, store.purge("comment", ids),
                 "every chunk's rows must be counted, not just the last one's");
-        assertEquals(List.of(new ItemRef("meme", "kept")), store.list("alice", "favourites"));
+        assertEquals(List.of(new ItemRef("meme", "kept")), store.list(u("alice"), "favourites"));
     }
 
     /** The names of the indexes whose leading columns are exactly these, straight from H2. */

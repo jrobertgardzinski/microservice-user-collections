@@ -1,5 +1,6 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
+import static com.jrobertgardzinski.collections.application.TestUsers.u;
 import au.com.dius.pact.consumer.MessagePactBuilder;
 import au.com.dius.pact.consumer.dsl.PactDslJsonBody;
 import au.com.dius.pact.consumer.dsl.PactDslJsonRootValue;
@@ -85,18 +86,18 @@ class CommentsDeletedPactTest {
     @PactTestFor(pactMethod = "commentsDeleted")
     @DisplayName("the announcement comments publishes takes the saved references it names")
     void the_named_comment_references_go(List<Message> messages) {
-        store.add("alice@example.com", "favourites", new ItemRef("comment", COMMENT));
-        store.add("bob@example.com", "favourites", new ItemRef("comment", COMMENT));
+        store.add(u("alice@example.com"), "favourites", new ItemRef("comment", COMMENT));
+        store.add(u("bob@example.com"), "favourites", new ItemRef("comment", COMMENT));
         // the id collision that the item type is the only defence against: same id, other kind
-        store.add("bob@example.com", "favourites", new ItemRef("meme", COMMENT));
+        store.add(u("bob@example.com"), "favourites", new ItemRef("meme", COMMENT));
 
         int removed = cascade.handle(CascadeConsumer.COMMENTS_TOPIC,
                 messages.get(0).contentsAsString());
 
         assertEquals(2, removed, "the real consumer, driven by the pact's own payload");
-        assertTrue(store.list("alice@example.com", "favourites").isEmpty());
+        assertTrue(store.list(u("alice@example.com"), "favourites").isEmpty());
         assertEquals(List.of(new ItemRef("meme", COMMENT)),
-                store.list("bob@example.com", "favourites"),
+                store.list(u("bob@example.com"), "favourites"),
                 "a comment deletion must never take the meme that happens to share its id");
     }
 

@@ -1,5 +1,7 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
+import static com.jrobertgardzinski.collections.application.TestUsers.u;
+import com.jrobertgardzinski.identity.UserId;
 import com.jrobertgardzinski.collections.application.PurgeDeletedItem;
 import com.jrobertgardzinski.collections.application.PurgeUserItems;
 import com.zaxxer.hikari.HikariConfig;
@@ -31,7 +33,7 @@ import static org.junit.jupiter.api.Assertions.fail;
 /**
  * Where the account-deletion saga's own closure and the deletion cascade can meet on the SAME row
  * in this service too — a leaver who had saved their OWN meme sees {@link PurgeUserItems} (the
- * saga's closure, addressed by {@code user_email}) and {@link PurgeDeletedItem} (the cascade off
+ * saga's closure, addressed by {@code user_id}) and {@link PurgeDeletedItem} (the cascade off
  * {@code MEME_DELETED}, addressed by {@code item_type}/{@code item_id}) both reach for the same
  * {@code collection_items} row — forced onto the real database, the same idea as
  * {@code MarkedCommentRaceTest} in microservice-comments.
@@ -58,8 +60,8 @@ import static org.junit.jupiter.api.Assertions.fail;
 @Testcontainers(disabledWithoutDocker = true)
 class MarkedItemRaceTest {
 
-    private static final String LEAVER = "leaver@example.com";
-    private static final String FAN = "fan@example.com";
+    private static final UserId LEAVER = u("leaver@example.com");
+    private static final UserId FAN = u("fan@example.com");
     private static final String MEME = "own-meme";
 
     @Container
@@ -108,8 +110,8 @@ class MarkedItemRaceTest {
             // simulates PurgeUserItems.execute(LEAVER) mid-flight: the exact DELETE eraseMarked
             // issues, held open — the leaver's row is locked but not yet committed gone
             try (PreparedStatement delete = probe.prepareStatement(
-                    "DELETE FROM collection_items WHERE user_email = ? AND status = 'PENDING_ERASURE'")) {
-                delete.setString(1, LEAVER);
+                    "DELETE FROM collection_items WHERE user_id = ? AND status = 'PENDING_ERASURE'")) {
+                delete.setObject(1, LEAVER.value());
                 delete.executeUpdate();
             }
 
@@ -170,8 +172,8 @@ class MarkedItemRaceTest {
              PreparedStatement update = c.prepareStatement(
                      "UPDATE collection_items SET status = 'PENDING_ERASURE', "
                              + "marked_for_erasure_at = CURRENT_TIMESTAMP "
-                             + "WHERE user_email = ? AND item_type = 'meme' AND item_id = ?")) {
-            update.setString(1, LEAVER);
+                             + "WHERE user_id = ? AND item_type = 'meme' AND item_id = ?")) {
+            update.setObject(1, LEAVER.value());
             update.setString(2, MEME);
             update.executeUpdate();
         } catch (Exception e) {

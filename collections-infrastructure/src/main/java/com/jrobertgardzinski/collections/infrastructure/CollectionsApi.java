@@ -1,5 +1,6 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
+import com.jrobertgardzinski.identity.UserId;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.jrobertgardzinski.collections.application.ListItems;
@@ -72,13 +73,13 @@ public class CollectionsApi implements HttpService {
             refuse(res, Status.BAD_REQUEST_400, tooLong);
             return;
         }
-        SaveItem.Status status = saveItem.execute(caller.get().email(), caller.get().userId(),
+        SaveItem.Status status = saveItem.execute(caller.get().userId(),
                 req.path().pathParameters().get("collection"), itemOf(req));
         res.status(status == SaveItem.Status.SAVED ? Status.CREATED_201 : Status.OK_200).send();
     }
 
     private void remove(ServerRequest req, ServerResponse res) {
-        Optional<String> user = authenticate(req).map(Caller::email);
+        Optional<UserId> user = authenticate(req).map(Caller::userId);
         if (user.isEmpty()) {
             refuse(res, Status.UNAUTHORIZED_401, "UNAUTHENTICATED");
             return;
@@ -98,7 +99,7 @@ public class CollectionsApi implements HttpService {
     }
 
     private void list(ServerRequest req, ServerResponse res) {
-        Optional<String> user = authenticate(req).map(Caller::email);
+        Optional<UserId> user = authenticate(req).map(Caller::userId);
         if (user.isEmpty()) {
             refuse(res, Status.UNAUTHORIZED_401, "UNAUTHENTICATED");
             return;

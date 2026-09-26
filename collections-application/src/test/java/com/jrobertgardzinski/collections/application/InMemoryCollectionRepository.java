@@ -13,71 +13,50 @@ import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 
 /**
- * A heap-only {@link CollectionRepository} for the tests that want no JDBC at all — this module's own
- * unit tests, {@code collections-infrastructure}'s HTTP scenarios, and (via this module's test-jar)
- * account-closure-specs, which used to keep a hand-copied twin of this exact class for the same
- * reason and drifted from it (see {@link ItemErasureContractTest}, which both this class and the
- * real JDBC adapter answer to). The running service never uses it: {@code Main} always wires the
- * JDBC adapter, over in-memory H2 when no {@code DB_URL} is set. A {@link LinkedHashSet} per (user,
- * collection) gives set semantics (idempotent save) while remembering insertion order for a
- * newest-first listing. Coarse {@code synchronized} methods are the whole concurrency story, so a
- * plain {@link HashMap} underneath suffices.
+ * A heap-only {@link CollectionRepository} for the tests that want no JDBC at all — this module's
+ * own unit tests, {@code collections-infrastructure}'s HTTP scenarios and (via this module's
+ * test-jar) account-closure-specs. The running service never uses it. A {@link LinkedHashSet} per
+ * (user, collection) gives set semantics (idempotent save) while remembering insertion order for a
+ * newest-first listing. Coarse {@code synchronized} methods are the whole concurrency story.
  *
  * <p>It implements {@link ItemErasure} as well, and the marks live in their OWN map rather than on
  * the refs — for the same reason the schema keeps the status on the row and the view does the
  * hiding: {@link #list} must not see a marked ref, and everything not in {@code marks} is ACTIVE.
- * That mirrors {@code active_collection_items} exactly, which is what makes a scenario that runs
- * against this store mean something about the one that runs against Postgres.
- *
- * <p>Living here, next to {@link CollectionRepository}/{@link ItemErasure} and their contract test,
- * rather than in {@code collections-infrastructure}, is deliberate: this class is pure JDK, exactly
- * as framework-free as the ports it stands in for, and a test double belongs on the test classpath
- * of everyone who needs it, not inside the jar the running service ships.
+ * {@link ItemErasureContractTest} holds this class and the JDBC adapter to the same promises.
  */
 public class InMemoryCollectionRepository implements CollectionRepository, ItemReferences, ItemErasure {
 
-    private record Key(String user, String collection) {
+    private record Key(UserId user, String collection) {
     }
 
-    /** The natural key of a row — the same three fields V1 made UNIQUE. */
-    private record Row(String user, String collection, ItemRef ref) {
+    /** The natural key of a row — the same three fields the schema makes UNIQUE. */
+    private record Row(UserId user, String collection, ItemRef ref) {
     }
 
     private final Map<Key, LinkedHashSet<ItemRef>> data = new HashMap<>();
     private final Map<Row, Instant> marks = new HashMap<>();
-    /** The owner's id per row — the {@code user_id} column; absent for a save without one. */
-    private final Map<Row, UserId> ids = new HashMap<>();
 
     @Override
-    public synchronized boolean add(String user, Optional<UserId> userId, String collection, ItemRef item) {
-        boolean added = data.computeIfAbsent(new Key(user, collection), k -> new LinkedHashSet<>()).add(item);
-        if (added) {
-            userId.ifPresent(id -> ids.put(new Row(user, collection, item), id));
-        }
-        return added;
+    public synchronized boolean add(UserId user, String collection, ItemRef item) {
+        return data.computeIfAbsent(new Key(user, collection), k -> new LinkedHashSet<>()).add(item);
     }
 
     @Override
-    public synchronized boolean remove(String user, String collection, ItemRef item) {
+    public synchronized boolean remove(UserId user, String collection, ItemRef item) {
         // a reserved row is not the owner's to remove, exactly as in the JDBC twin: it is invisible
         // in every listing, and destroying it would leave a compensation with nothing to restore
         if (marks.containsKey(new Row(user, collection, item))) {
             return false;
         }
         LinkedHashSet<ItemRef> set = data.get(new Key(user, collection));
-        boolean removed = set != null && set.remove(item);
-        if (removed) {
-            ids.remove(new Row(user, collection, item));
-        }
-        return removed;
+        return set != null && set.remove(item);
     }
 
     @Override
-    public synchronized List<ItemRef> list(String user, String collection) {
+    public synchronized List<ItemRef> list(UserId user, String collection) {
         LinkedHashSet<ItemRef> set = data.get(new Key(user, collection));
         if (set == null) {
             return List.of();
@@ -93,16 +72,6 @@ public class InMemoryCollectionRepository implements CollectionRepository, ItemR
     }
 
     @Override
-    public synchronized List<SavedItem> activeOf(String user) {
-        return itemsOf(user, false);
-    }
-
-    @Override
-    public synchronized List<SavedItem> pendingOf(String user) {
-        return itemsOf(user, true);
-    }
-
-    @Override
     public synchronized List<SavedItem> activeOf(UserId user) {
         return itemsOf(user, false);
     }
@@ -113,31 +82,6 @@ public class InMemoryCollectionRepository implements CollectionRepository, ItemR
     }
 
     private List<SavedItem> itemsOf(UserId user, boolean marked) {
-        List<SavedItem> found = new ArrayList<>();
-        for (Map.Entry<Row, UserId> owned : ids.entrySet()) {
-            if (owned.getValue().equals(user) && marks.containsKey(owned.getKey()) == marked) {
-                found.add(itemOf(owned.getKey()));
-            }
-        }
-        return found;
-    }
-
-    @Override
-    public synchronized int eraseMarked(UserId user) {
-        int removed = 0;
-        for (SavedItem reserved : pendingOf(user)) {
-            Row row = new Row(reserved.user(), reserved.collection(), reserved.ref());
-            LinkedHashSet<ItemRef> set = data.get(new Key(row.user(), row.collection()));
-            if (set != null && set.remove(row.ref())) {
-                removed++;
-            }
-            marks.remove(row);
-            ids.remove(row);
-        }
-        return removed;
-    }
-
-    private List<SavedItem> itemsOf(String user, boolean marked) {
         List<SavedItem> found = new ArrayList<>();
         for (Map.Entry<Key, LinkedHashSet<ItemRef>> entry : data.entrySet()) {
             if (!entry.getKey().user().equals(user)) {
@@ -164,7 +108,7 @@ public class InMemoryCollectionRepository implements CollectionRepository, ItemR
     }
 
     @Override
-    public synchronized int eraseMarked(String user) {
+    public synchronized int eraseMarked(UserId user) {
         int removed = 0;
         for (SavedItem reserved : pendingOf(user)) {
             LinkedHashSet<ItemRef> set = data.get(new Key(user, reserved.collection()));
@@ -172,7 +116,6 @@ public class InMemoryCollectionRepository implements CollectionRepository, ItemR
                 removed++;
             }
             marks.remove(new Row(user, reserved.collection(), reserved.ref()));
-            ids.remove(new Row(user, reserved.collection(), reserved.ref()));
         }
         return removed;
     }
@@ -188,11 +131,7 @@ public class InMemoryCollectionRepository implements CollectionRepository, ItemR
         return stuck;
     }
 
-    /**
-     * The reservations, for a test that fingerprints the whole world (the idempotence law). Without
-     * it the law would only see what {@link #list} shows — and every erasure command would pass it
-     * trivially, because a mark is invisible there BY DESIGN.
-     */
+    /** The reservations, for a test that fingerprints the whole world (the idempotence law). */
     public synchronized Map<String, Instant> marks() {
         Map<String, Instant> flat = new HashMap<>();
         marks.forEach((row, at) -> flat.put(
@@ -203,20 +142,11 @@ public class InMemoryCollectionRepository implements CollectionRepository, ItemR
 
     private SavedItem itemOf(Row row) {
         Instant marked = marks.get(row);
-        return new SavedItem(row.user(), Optional.ofNullable(ids.get(row)), row.collection(), row.ref(),
+        return new SavedItem(row.user(), row.collection(), row.ref(),
                 marked == null ? ItemStatus.ACTIVE : ItemStatus.PENDING_ERASURE, marked);
     }
 
-    /**
-     * The item axis, the heap's answer to V2's index: every (user, collection) bucket loses the
-     * doomed refs. A full walk of the map is the honest in-memory equivalent of a table scan —
-     * this store exists for tests, where the map holds a handful of entries; the index that makes
-     * the same question cheap lives in the migration, not here.
-     *
-     * <p>Status-blind on purpose, exactly like its JDBC twin: the cascade fires because the meme or
-     * the comment is GONE, and a reference to something that no longer exists has nothing to be
-     * restored to.
-     */
+    /** The item axis: every (user, collection) bucket loses the doomed refs, whatever their status. */
     @Override
     public synchronized int purge(String itemType, List<String> itemIds) {
         Set<ItemRef> doomed = new HashSet<>();
@@ -228,9 +158,7 @@ public class InMemoryCollectionRepository implements CollectionRepository, ItemR
             for (ItemRef ref : doomed) {
                 if (entry.getValue().remove(ref)) {
                     removed++;
-                    Row row = new Row(entry.getKey().user(), entry.getKey().collection(), ref);
-                    marks.remove(row);
-                    ids.remove(row);
+                    marks.remove(new Row(entry.getKey().user(), entry.getKey().collection(), ref));
                 }
             }
         }

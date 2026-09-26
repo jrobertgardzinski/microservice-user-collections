@@ -336,8 +336,7 @@ public class PurgeCommandsConsumer {
         ClosureCommand parsed = new ClosureCommand(
                 command.path(ClosureMessages.Field.TYPE).asText(),
                 sagaId,
-                command.path(ClosureMessages.Field.EMAIL).asText(),
-                ClosureCommand.userIdOf(command.path(ClosureMessages.Field.USER_ID).asText(null)),
+                ClosureCommand.userIdOf(command.path(ClosureMessages.Field.USER_ID).asText(null)).orElse(null),
                 command.path(ClosureMessages.Field.INITIATED_BY).asText(),
                 Optional.empty());
 
@@ -351,7 +350,7 @@ public class PurgeCommandsConsumer {
             // absent one, because the orchestrator drops an unparseable one while a missing one
             // falls back to matching by e-mail. This service only says what it reserved.
             return Optional.of(mapper.writeValueAsString(
-                    new ClosureConfirmation(sagaId, parsed.email(), reserved.references()).fields()));
+                    new ClosureConfirmation(sagaId, parsed.userId(), reserved.references()).fields()));
         } catch (Exception impossible) {
             throw new IllegalStateException("could not build confirmation", impossible);
         }

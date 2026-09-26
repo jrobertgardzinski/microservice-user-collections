@@ -1,5 +1,6 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
+import static com.jrobertgardzinski.collections.application.TestUsers.u;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jrobertgardzinski.collections.application.InMemoryCollectionRepository;
 import com.jrobertgardzinski.collections.application.ItemReferences;
@@ -73,8 +74,8 @@ class CascadeConsumerLoopTest {
 
     @Test
     void one_loop_serves_both_cascade_topics_and_commits_what_it_handled() throws Exception {
-        store.add("alice@example.com", "favourites", new ItemRef("meme", MEME));
-        store.add("alice@example.com", "favourites", new ItemRef("comment", COMMENT_1));
+        store.add(u("alice@example.com"), "favourites", new ItemRef("meme", MEME));
+        store.add(u("alice@example.com"), "favourites", new ItemRef("comment", COMMENT_1));
         MockConsumer<String, String> consumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST);
         prime(consumer, () -> {
             consumer.addRecord(record(MEMES, 0, MEME, memeDeleted(MEME)));
@@ -86,13 +87,13 @@ class CascadeConsumerLoopTest {
                 () -> committedOffset(consumer, MEMES) >= 1
                         && committedOffset(consumer, COMMENTS) >= 1);
 
-        assertTrue(store.list("alice@example.com", "favourites").isEmpty(),
+        assertTrue(store.list(u("alice@example.com"), "favourites").isEmpty(),
                 "one thread cascaded both a meme and its comments");
     }
 
     @Test
     void the_correlation_id_rides_from_the_header_into_the_mdc() throws Exception {
-        store.add("alice@example.com", "favourites", new ItemRef("meme", MEME));
+        store.add(u("alice@example.com"), "favourites", new ItemRef("meme", MEME));
         List<String> cidsSeenByTheUseCase = new CopyOnWriteArrayList<>();
         // read the MDC from INSIDE the purge — that is where a log line would read it, and the
         // loop clears it again on the way out
@@ -112,7 +113,7 @@ class CascadeConsumerLoopTest {
 
     @Test
     void a_transient_store_failure_is_retried_and_the_cascade_still_happens() throws Exception {
-        store.add("alice@example.com", "favourites", new ItemRef("meme", MEME));
+        store.add(u("alice@example.com"), "favourites", new ItemRef("meme", MEME));
         AtomicInteger failuresLeft = new AtomicInteger(1);
         AtomicInteger attempts = new AtomicInteger();
         ItemReferences failingOnce = (itemType, itemIds) -> {
@@ -129,7 +130,7 @@ class CascadeConsumerLoopTest {
         await("the retried record's offset to commit", () -> committedOffset(consumer, MEMES) >= 1);
 
         assertEquals(2, attempts.get(), "one failure, one successful retry — in place, no rewind");
-        assertTrue(store.list("alice@example.com", "favourites").isEmpty(),
+        assertTrue(store.list(u("alice@example.com"), "favourites").isEmpty(),
                 "a database hiccup must not cost a cleanup");
     }
 
@@ -141,8 +142,8 @@ class CascadeConsumerLoopTest {
         // is abandoned after a bounded number of attempts: the ref survives its meme (the UI
         // renders it as unavailable), and — this is the part worth the test — the NEXT deletion
         // still gets cascaded, which an endless retry would have made impossible.
-        store.add("alice@example.com", "favourites", new ItemRef("meme", MEME));
-        store.add("alice@example.com", "favourites", new ItemRef("comment", COMMENT_1));
+        store.add(u("alice@example.com"), "favourites", new ItemRef("meme", MEME));
+        store.add(u("alice@example.com"), "favourites", new ItemRef("comment", COMMENT_1));
         AtomicInteger memeAttempts = new AtomicInteger();
         ItemReferences brokenForMemesOnly = (itemType, itemIds) -> {
             if (CascadeConsumer.MEME_ITEM_TYPE.equals(itemType)) {
@@ -164,7 +165,7 @@ class CascadeConsumerLoopTest {
         assertEquals(CascadeConsumer.MAX_ATTEMPTS, memeAttempts.get(),
                 "bounded: tried " + CascadeConsumer.MAX_ATTEMPTS + " times, then abandoned");
         assertEquals(List.of(new ItemRef("meme", MEME)),
-                store.list("alice@example.com", "favourites"),
+                store.list(u("alice@example.com"), "favourites"),
                 "the dead row stays — and the comment ref, whose purge worked, is gone");
         assertTrue(loopThread.isAlive(), "and the loop lives on to cascade the next deletion");
     }

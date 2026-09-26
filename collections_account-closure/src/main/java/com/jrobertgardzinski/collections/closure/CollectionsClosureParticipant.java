@@ -1,6 +1,5 @@
 package com.jrobertgardzinski.collections.closure;
 
-import java.util.Optional;
 import com.jrobertgardzinski.identity.UserId;
 import com.jrobertgardzinski.closure.ClosureCommand;
 import com.jrobertgardzinski.closure.ClosureMessages;
@@ -49,26 +48,25 @@ public final class CollectionsClosureParticipant {
         String sagaId = command.sagaId();
         if (!command.isAddressed()) {
             // confirming would advance the saga on a deletion that never happened
-            LOG.warn("dropping {} without an email (saga {})", type, sagaId);
+            LOG.warn("dropping {} without a user id (saga {})", type, sagaId);
             return new ClosureOutcome.Unaddressed(type);
         }
-        String email = command.email();   // PII: never logged
-        Optional<UserId> leaver = command.userId();
+        UserId leaver = command.userId();
         return switch (type) {
-            case ERASE -> erase(sagaId, email, leaver);
+            case ERASE -> erase(sagaId, leaver);
             case RESTORE -> {
-                int restored = restoreUserItems.execute(email, leaver);
+                int restored = restoreUserItems.execute(leaver);
                 LOG.info("restored {} collection refs: the saga compensated (saga {})", restored, sagaId);
                 yield new ClosureOutcome.Restored(restored);
             }
-            case MARK -> mark(sagaId, email, leaver);
+            case MARK -> mark(sagaId, leaver);
             default -> throw new IllegalStateException("unreachable: " + type);
         };
     }
 
     /** Destroys only what the mark reserved; a reference saved after the mark is counted and left standing. */
-    private ClosureOutcome erase(String sagaId, String email, Optional<UserId> leaver) {
-        PurgeUserItems.Closure closure = purgeUserItems.execute(email, leaver);
+    private ClosureOutcome erase(String sagaId, UserId leaver) {
+        PurgeUserItems.Closure closure = purgeUserItems.execute(leaver);
         LOG.info("erased {} reserved collection refs on the saga's closure (saga {})", closure.erased(), sagaId);
         if (closure.leftBehind() > 0) {
             observations.record(new Observation.ErasureResidue(closure.leftBehind()));
@@ -79,8 +77,8 @@ public final class CollectionsClosureParticipant {
         return new ClosureOutcome.Erased(closure.erased(), closure.leftBehind());
     }
 
-    private ClosureOutcome mark(String sagaId, String email, Optional<UserId> leaver) {
-        int reserved = markForErasure.execute(email, leaver);
+    private ClosureOutcome mark(String sagaId, UserId leaver) {
+        int reserved = markForErasure.execute(leaver);
         LOG.info("marked {} collection refs of one leaver for erasure (saga {})", reserved, sagaId);
         if (reserved == 0) {
             // "nothing of theirs" and "rows still under their old address" look the same from here

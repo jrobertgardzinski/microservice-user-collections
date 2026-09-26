@@ -1,5 +1,6 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
+import com.jrobertgardzinski.identity.UserId;
 import com.jrobertgardzinski.collections.domain.Observation;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jrobertgardzinski.observation.Observations;
@@ -39,13 +40,10 @@ class PurgeConsumerHealthTest {
 
     /** A store that holds nothing: these tests are about the probes, not about the purge. */
     private final ItemErasure erasure = new ItemErasure() {
-        public List<SavedItem> activeOf(String user) { return List.of(); }
-        public List<SavedItem> pendingOf(String user) { return List.of(); }
         public void store(SavedItem state) { }
-        public int eraseMarked(String user) { return 0; }
-        public List<SavedItem> activeOf(com.jrobertgardzinski.identity.UserId user) { return List.of(); }
-        public List<SavedItem> pendingOf(com.jrobertgardzinski.identity.UserId user) { return List.of(); }
-        public int eraseMarked(com.jrobertgardzinski.identity.UserId user) { return 0; }
+        public List<SavedItem> activeOf(UserId user) { return List.of(); }
+        public List<SavedItem> pendingOf(UserId user) { return List.of(); }
+        public int eraseMarked(UserId user) { return 0; }
         public List<SavedItem> pendingSince(java.time.Instant cutoff) { return List.of(); }
     };
 

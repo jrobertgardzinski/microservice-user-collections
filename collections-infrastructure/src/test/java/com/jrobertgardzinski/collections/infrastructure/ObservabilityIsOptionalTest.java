@@ -1,5 +1,7 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
+import static com.jrobertgardzinski.collections.application.TestUsers.u;
+import com.jrobertgardzinski.identity.UserId;
 import com.jrobertgardzinski.collections.application.ItemErasure;
 import com.jrobertgardzinski.observation.Observations;
 import com.jrobertgardzinski.collections.application.WatchErasureBacklog;
@@ -109,30 +111,19 @@ class ObservabilityIsOptionalTest {
     }
 
     private static ItemErasure holding(Instant markedAt) {
-        SavedItem marked = new SavedItem("leaver@example.com", "favourites",
+        SavedItem marked = new SavedItem(u("leaver@example.com"), "favourites",
                 new ItemRef("meme", "42"), ItemStatus.PENDING_ERASURE, markedAt);
         return new ItemErasure() {
-            public List<SavedItem> activeOf(String user) {
+
+            public List<SavedItem> activeOf(UserId user) {
                 return List.of();
             }
 
-            public List<SavedItem> pendingOf(String user) {
+            public List<SavedItem> pendingOf(UserId user) {
                 return List.of();
             }
 
-            public List<SavedItem> activeOf(com.jrobertgardzinski.identity.UserId user) {
-                return List.of();
-            }
-
-            public List<SavedItem> pendingOf(com.jrobertgardzinski.identity.UserId user) {
-                return List.of();
-            }
-
-            public int eraseMarked(com.jrobertgardzinski.identity.UserId user) {
-                return 0;
-            }
-
-            public int eraseMarked(String user) {
+            public int eraseMarked(UserId user) {
                 return 0;
             }
 
