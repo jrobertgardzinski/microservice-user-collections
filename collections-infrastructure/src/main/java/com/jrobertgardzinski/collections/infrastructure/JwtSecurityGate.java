@@ -15,7 +15,7 @@ import java.util.function.Supplier;
  * serves at {@code /.well-known/jwks.json}, and the user is read from the claims. One JWKS fetch
  * amortises over every request; the trade-off is revocation blindness until the token's
  * {@code exp}. The verification core is the shared offline-jwt library (it used to be a local
- * copy with four twins); this service reads only the subject — roles play no part here.
+ * copy with four twins); this service reads only the e-mail claim — roles play no part here.
  */
 final class JwtSecurityGate implements SecurityGate {
 
@@ -31,6 +31,6 @@ final class JwtSecurityGate implements SecurityGate {
 
     @Override
     public Optional<String> userFor(String accessToken) {
-        return verifier.verify(accessToken).map(VerifiedToken::subject);
+        return verifier.verify(accessToken).map(VerifiedToken::email);
     }
 }
