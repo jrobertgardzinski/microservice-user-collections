@@ -1,7 +1,6 @@
 package com.jrobertgardzinski.collections.application;
 
 import com.jrobertgardzinski.collections.domain.ItemRef;
-import com.jrobertgardzinski.collections.infrastructure.InMemoryCollectionStore;
 import io.qameta.allure.Epic;
 import io.qameta.allure.Feature;
 import org.junit.jupiter.api.BeforeEach;

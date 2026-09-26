@@ -1,8 +1,5 @@
-package com.jrobertgardzinski.collections.infrastructure;
+package com.jrobertgardzinski.collections.application;
 
-import com.jrobertgardzinski.collections.application.CollectionStore;
-import com.jrobertgardzinski.collections.application.ItemErasure;
-import com.jrobertgardzinski.collections.application.ItemReferences;
 import com.jrobertgardzinski.collections.domain.ItemRef;
 import com.jrobertgardzinski.collections.domain.ItemStatus;
 import com.jrobertgardzinski.collections.domain.SavedItem;
@@ -18,18 +15,26 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * A heap-only {@link CollectionStore} for the tests that want no JDBC at all (application-layer
- * scenarios, the HTTP scenarios' store). The running service never uses it: {@link Main} always
- * wires {@link JdbcCollectionStore}, over in-memory H2 when no {@code DB_URL} is set. A {@link
- * LinkedHashSet} per (user, collection) gives set semantics (idempotent save) while remembering
- * insertion order for a newest-first listing. Coarse {@code synchronized} methods are the whole
- * concurrency story, so a plain {@link HashMap} underneath suffices.
+ * A heap-only {@link CollectionStore} for the tests that want no JDBC at all — this module's own
+ * unit tests, {@code collections-infrastructure}'s HTTP scenarios, and (via this module's test-jar)
+ * account-closure-specs, which used to keep a hand-copied twin of this exact class for the same
+ * reason and drifted from it (see {@link ItemErasureContractTest}, which both this class and the
+ * real JDBC adapter answer to). The running service never uses it: {@code Main} always wires the
+ * JDBC adapter, over in-memory H2 when no {@code DB_URL} is set. A {@link LinkedHashSet} per (user,
+ * collection) gives set semantics (idempotent save) while remembering insertion order for a
+ * newest-first listing. Coarse {@code synchronized} methods are the whole concurrency story, so a
+ * plain {@link HashMap} underneath suffices.
  *
  * <p>It implements {@link ItemErasure} as well, and the marks live in their OWN map rather than on
  * the refs — for the same reason the schema keeps the status on the row and the view does the
  * hiding: {@link #list} must not see a marked ref, and everything not in {@code marks} is ACTIVE.
  * That mirrors {@code active_collection_items} exactly, which is what makes a scenario that runs
  * against this store mean something about the one that runs against Postgres.
+ *
+ * <p>Living here, next to {@link CollectionStore}/{@link ItemErasure} and their contract test,
+ * rather than in {@code collections-infrastructure}, is deliberate: this class is pure JDK, exactly
+ * as framework-free as the ports it stands in for, and a test double belongs on the test classpath
+ * of everyone who needs it, not inside the jar the running service ships.
  */
 public class InMemoryCollectionStore implements CollectionStore, ItemReferences, ItemErasure {
 

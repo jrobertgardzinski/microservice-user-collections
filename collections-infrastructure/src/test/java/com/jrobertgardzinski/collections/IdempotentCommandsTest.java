@@ -7,7 +7,7 @@ import com.jrobertgardzinski.collections.application.RemoveItem;
 import com.jrobertgardzinski.collections.application.RestoreUserItems;
 import com.jrobertgardzinski.collections.application.SaveItem;
 import com.jrobertgardzinski.collections.domain.ItemRef;
-import com.jrobertgardzinski.collections.infrastructure.InMemoryCollectionStore;
+import com.jrobertgardzinski.collections.application.InMemoryCollectionStore;
 import io.qameta.allure.Epic;
 import io.qameta.allure.Feature;
 import org.junit.jupiter.api.DynamicTest;

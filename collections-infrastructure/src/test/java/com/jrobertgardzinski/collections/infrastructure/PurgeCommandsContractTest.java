@@ -1,5 +1,6 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
+import com.jrobertgardzinski.collections.application.InMemoryCollectionStore;
 import com.jrobertgardzinski.collections.domain.Observation;
 import au.com.dius.pact.consumer.MessagePactBuilder;
 import au.com.dius.pact.consumer.dsl.PactDslJsonBody;

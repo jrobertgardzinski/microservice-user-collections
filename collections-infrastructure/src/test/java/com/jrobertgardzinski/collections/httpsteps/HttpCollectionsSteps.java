@@ -6,7 +6,7 @@ import com.jrobertgardzinski.collections.application.ListItems;
 import com.jrobertgardzinski.collections.application.RemoveItem;
 import com.jrobertgardzinski.collections.application.SaveItem;
 import com.jrobertgardzinski.collections.infrastructure.CollectionsApi;
-import com.jrobertgardzinski.collections.infrastructure.InMemoryCollectionStore;
+import com.jrobertgardzinski.collections.application.InMemoryCollectionStore;
 import io.cucumber.java.After;
 import io.cucumber.java.Before;
 import io.cucumber.java.en.Given;

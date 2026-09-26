@@ -10,6 +10,7 @@ import au.com.dius.pact.core.model.annotations.Pact;
 import au.com.dius.pact.core.model.messaging.Message;
 import au.com.dius.pact.core.model.messaging.MessagePact;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jrobertgardzinski.collections.application.InMemoryCollectionStore;
 import com.jrobertgardzinski.collections.application.PurgeDeletedItem;
 import com.jrobertgardzinski.collections.domain.ItemRef;
 import io.qameta.allure.Epic;

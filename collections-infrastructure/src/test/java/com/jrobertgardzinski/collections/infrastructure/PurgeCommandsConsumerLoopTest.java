@@ -1,5 +1,6 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
+import com.jrobertgardzinski.collections.application.InMemoryCollectionStore;
 import com.jrobertgardzinski.collections.closure.CollectionsClosureParticipant;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.spi.ILoggingEvent;
