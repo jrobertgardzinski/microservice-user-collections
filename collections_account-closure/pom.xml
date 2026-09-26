@@ -29,14 +29,6 @@
             <artifactId>collections-application</artifactId>
         </dependency>
         <dependency>
-            <!-- the port contracts (this module's own heap stands in for the adapter) -->
-            <groupId>com.jrobertgardzinski</groupId>
-            <artifactId>collections-application</artifactId>
-            <version>${project.version}</version>
-            <type>test-jar</type>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
             <groupId>com.jrobertgardzinski</groupId>
             <artifactId>collections-domain</artifactId>
         </dependency>
@@ -55,17 +47,6 @@
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>io.qameta.allure</groupId>
-            <artifactId>allure-junit5</artifactId>
-            <scope>test</scope>
         </dependency>
     </dependencies>
 </project>
