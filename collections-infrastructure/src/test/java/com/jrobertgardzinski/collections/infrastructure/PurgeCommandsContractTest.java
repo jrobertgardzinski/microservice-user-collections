@@ -64,7 +64,8 @@ class PurgeCommandsContractTest {
                 .withContent(new PactDslJsonBody()
                         .stringValue("type", "PURGE_USER_CONTENT")
                         .uuid("sagaId")
-                        .stringType("email", LEAVER))
+                        .stringType("email", LEAVER)
+                        .uuid("userId"))
                 .toPact();
     }
 
@@ -74,7 +75,8 @@ class PurgeCommandsContractTest {
                 .withContent(new PactDslJsonBody()
                         .stringValue("type", "ERASE_USER_CONTENT")
                         .uuid("sagaId")
-                        .stringType("email", LEAVER))
+                        .stringType("email", LEAVER)
+                        .uuid("userId"))
                 .toPact();
     }
 
@@ -84,7 +86,8 @@ class PurgeCommandsContractTest {
                 .withContent(new PactDslJsonBody()
                         .stringValue("type", "RESTORE_USER_CONTENT")
                         .uuid("sagaId")
-                        .stringType("email", LEAVER))
+                        .stringType("email", LEAVER)
+                        .uuid("userId"))
                 .toPact();
     }
 

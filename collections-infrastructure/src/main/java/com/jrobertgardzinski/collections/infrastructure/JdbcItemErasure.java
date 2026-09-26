@@ -46,6 +46,48 @@ public class JdbcItemErasure implements ItemErasure {
         return byUserAndStatus(user, ItemStatus.PENDING_ERASURE);
     }
 
+    @Override
+    public List<SavedItem> activeOf(UserId user) {
+        return byIdAndStatus(user, ItemStatus.ACTIVE);
+    }
+
+    @Override
+    public List<SavedItem> pendingOf(UserId user) {
+        return byIdAndStatus(user, ItemStatus.PENDING_ERASURE);
+    }
+
+    private List<SavedItem> byIdAndStatus(UserId user, ItemStatus status) {
+        try (Connection c = dataSource.getConnection();
+             PreparedStatement ps = c.prepareStatement(
+                     "SELECT user_email, user_id, collection, item_type, item_id, status, "
+                             + "marked_for_erasure_at FROM collection_items WHERE user_id = ? AND status = ?")) {
+            ps.setObject(1, user.value());
+            ps.setString(2, status.name());
+            try (ResultSet rs = ps.executeQuery()) {
+                List<SavedItem> found = new ArrayList<>();
+                while (rs.next()) {
+                    found.add(itemOf(rs.getString("user_email"), rs));
+                }
+                return found;
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("could not read the erasure state of a user's items", e);
+        }
+    }
+
+    @Override
+    public int eraseMarked(UserId user) {
+        try (Connection c = dataSource.getConnection();
+             PreparedStatement ps = c.prepareStatement(
+                     "DELETE FROM collection_items WHERE user_id = ? AND status = ?")) {
+            ps.setObject(1, user.value());
+            ps.setString(2, ItemStatus.PENDING_ERASURE.name());
+            return ps.executeUpdate();
+        } catch (SQLException e) {
+            throw new IllegalStateException("could not erase the marked items of a user", e);
+        }
+    }
+
     private List<SavedItem> byUserAndStatus(String user, ItemStatus status) {
         try (Connection c = dataSource.getConnection();
              PreparedStatement ps = c.prepareStatement(

@@ -2,8 +2,12 @@ package com.jrobertgardzinski.collections.application;
 
 import com.jrobertgardzinski.collections.domain.SavedItem;
 
+import com.jrobertgardzinski.identity.UserId;
+
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * The erasure-aware side of the store: the only port in this service that can see a saved reference
@@ -31,6 +35,38 @@ public interface ItemErasure {
      */
     List<SavedItem> pendingOf(String user);
 
+    /** The same two halves keyed by identity: rows whose user_id is this one. */
+    List<SavedItem> activeOf(UserId user);
+
+    List<SavedItem> pendingOf(UserId user);
+
+    /**
+     * The leaver's active rows during the dual period: by id when the closure carries one, plus
+     * the rows under their address that have no id yet (the backfill has not reached them). A row
+     * with another id under the same address is somebody else's.
+     */
+    default List<SavedItem> activeOf(String user, Optional<UserId> userId) {
+        return ofLeaver(user, userId, activeOf(user), userId.map(this::activeOf));
+    }
+
+    default List<SavedItem> pendingOf(String user, Optional<UserId> userId) {
+        return ofLeaver(user, userId, pendingOf(user), userId.map(this::pendingOf));
+    }
+
+    private static List<SavedItem> ofLeaver(String user, Optional<UserId> userId,
+                                            List<SavedItem> byAddress, Optional<List<SavedItem>> byId) {
+        if (byId.isEmpty()) {
+            return byAddress;
+        }
+        List<SavedItem> rows = new ArrayList<>(byId.get());
+        for (SavedItem row : byAddress) {
+            if (row.userId().isEmpty()) {
+                rows.add(row);
+            }
+        }
+        return rows;
+    }
+
     /**
      * Persist the erasure state the aggregate computed — {@code status} and
      * {@code markedForErasureAt}, nothing else on the row, addressed by the natural key. This is
@@ -52,6 +88,14 @@ public interface ItemErasure {
      * reserved is exactly the set that goes.
      */
     int eraseMarked(String user);
+
+    /** The marked rows carrying this id — the bulk half of the erasure, by identity. */
+    int eraseMarked(UserId user);
+
+    /** Both halves of the leaver's marked rows: by id first, then whatever the address still holds. */
+    default int eraseMarked(String user, Optional<UserId> userId) {
+        return userId.map(this::eraseMarked).orElse(0) + eraseMarked(user);
+    }
 
     /**
      * Every reference marked before {@code cutoff} and still not erased — the reaper's query, and

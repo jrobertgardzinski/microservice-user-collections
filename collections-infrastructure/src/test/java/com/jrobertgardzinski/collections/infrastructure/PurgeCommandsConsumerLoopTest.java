@@ -727,6 +727,18 @@ class PurgeCommandsConsumerLoopTest {
             return delegate.pendingOf(user);
         }
 
+        public List<SavedItem> activeOf(com.jrobertgardzinski.identity.UserId user) {
+            return List.of();
+        }
+
+        public List<SavedItem> pendingOf(com.jrobertgardzinski.identity.UserId user) {
+            return List.of();
+        }
+
+        public int eraseMarked(com.jrobertgardzinski.identity.UserId user) {
+            return 0;
+        }
+
         @Override
         public void store(SavedItem state) {
             delegate.store(state);

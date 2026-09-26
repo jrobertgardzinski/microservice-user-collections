@@ -129,6 +129,9 @@ class ErasureBacklogWatchTest {
             public List<SavedItem> pendingOf(String user) { return List.of(); }
             public void store(SavedItem state) { }
             public int eraseMarked(String user) { return 0; }
+            public List<SavedItem> activeOf(com.jrobertgardzinski.identity.UserId user) { return List.of(); }
+            public List<SavedItem> pendingOf(com.jrobertgardzinski.identity.UserId user) { return List.of(); }
+            public int eraseMarked(com.jrobertgardzinski.identity.UserId user) { return 0; }
 
             public List<SavedItem> pendingSince(Instant cutoff) {
                 throw new IllegalStateException("database away");

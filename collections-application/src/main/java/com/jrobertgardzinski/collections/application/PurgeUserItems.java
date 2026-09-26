@@ -1,5 +1,7 @@
 package com.jrobertgardzinski.collections.application;
 
+import java.util.Optional;
+import com.jrobertgardzinski.identity.UserId;
 /**
  * The IRREVERSIBLE half of the account-deletion axis for this service: everything the leaver saved
  * AND THE SAGA RESERVED is dropped, across every collection. It runs on the orchestrator's CLOSURE
@@ -49,11 +51,15 @@ public class PurgeUserItems {
     }
 
     public Closure execute(String user) {
-        int erased = erasure.eraseMarked(user);
+        return execute(user, Optional.empty());
+    }
+
+    public Closure execute(String user, Optional<UserId> userId) {
+        int erased = erasure.eraseMarked(user, userId);
         // asked only of the delivery that actually closed a saga. A redelivery reserves nothing and
         // erases nothing, and counting then would report whatever that address holds today — which
         // after a re-registration is a different person's list — as a leaver's residue
-        int leftBehind = erased == 0 ? 0 : erasure.activeOf(user).size();
+        int leftBehind = erased == 0 ? 0 : erasure.activeOf(user, userId).size();
         return new Closure(erased, leftBehind);
     }
 }

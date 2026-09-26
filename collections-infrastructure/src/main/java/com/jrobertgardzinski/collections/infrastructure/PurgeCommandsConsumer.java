@@ -337,6 +337,7 @@ public class PurgeCommandsConsumer {
                 command.path(ClosureMessages.Field.TYPE).asText(),
                 sagaId,
                 command.path(ClosureMessages.Field.EMAIL).asText(),
+                ClosureCommand.userIdOf(command.path(ClosureMessages.Field.USER_ID).asText(null)),
                 command.path(ClosureMessages.Field.INITIATED_BY).asText(),
                 Optional.empty());
 

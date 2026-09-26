@@ -89,6 +89,35 @@ public abstract class ItemErasureContractTest {
     }
 
     @Test
+    @DisplayName("by id: the rows carrying that id, whatever address they were written under")
+    protected void rows_are_found_by_the_owners_id() {
+        UserId aliceId = UserId.random();
+        givenSavedItem(alice, Optional.of(aliceId), LIST, ref("one"));
+        givenSavedItem("old+" + run + "@example.com", Optional.of(aliceId), LIST, ref("two"));
+        givenSavedItem(alice, Optional.of(UserId.random()), LIST, ref("three"));
+
+        assertEquals(2, erasure().activeOf(aliceId).size());
+        erasure().store(erasure().activeOf(aliceId).get(0).markForErasure(NOON));
+        assertEquals(1, erasure().pendingOf(aliceId).size());
+        assertEquals(1, erasure().eraseMarked(aliceId), "the marked row of that id goes, the other stays");
+        assertEquals(1, erasure().activeOf(aliceId).size());
+    }
+
+    @Test
+    @DisplayName("during the dual period the leaver is their id plus their id-less rows under the address")
+    protected void the_leaver_is_the_id_plus_the_rows_without_one() {
+        UserId aliceId = UserId.random();
+        givenSavedItem("old+" + run + "@example.com", Optional.of(aliceId), LIST, ref("one"));
+        givenSavedItem(alice, Optional.empty(), LIST, ref("two"));
+        givenSavedItem(alice, Optional.of(UserId.random()), LIST, ref("three"));
+
+        assertEquals(2, erasure().activeOf(alice, Optional.of(aliceId)).size(),
+                "the same address under another id is somebody else's");
+        assertEquals(2, erasure().activeOf(alice, Optional.empty()).size(),
+                "a closure without an id still goes by the address alone");
+    }
+
+    @Test
     @DisplayName("a restored reference is active again and carries no mark")
     protected void restoring_puts_it_back() {
         givenSavedItem(alice, LIST, ref("one"));

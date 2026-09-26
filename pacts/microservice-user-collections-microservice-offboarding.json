@@ -7,13 +7,17 @@
       "contents": {
         "email": "leaver@example.com",
         "sagaId": "e2490de5-5bd3-43d5-b7c4-526e33f71304",
-        "type": "PURGE_USER_CONTENT"
+        "type": "PURGE_USER_CONTENT",
+        "userId": "e2490de5-5bd3-43d5-b7c4-526e33f71304"
       },
       "description": "a purge user content command",
       "generators": {
         "body": {
           "$.sagaId": {
             "type": "Uuid"
+          },
+          "$.userId": {
+            "type": "Uuid"
           }
         }
       },
@@ -35,6 +39,15 @@
                 "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
               }
             ]
+          },
+          "$.userId": {
+            "combine": "AND",
+            "matchers": [
+              {
+                "match": "regex",
+                "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+              }
+            ]
           }
         }
       },
@@ -46,13 +59,17 @@
       "contents": {
         "email": "leaver@example.com",
         "sagaId": "e2490de5-5bd3-43d5-b7c4-526e33f71304",
-        "type": "RESTORE_USER_CONTENT"
+        "type": "RESTORE_USER_CONTENT",
+        "userId": "e2490de5-5bd3-43d5-b7c4-526e33f71304"
       },
       "description": "a restore user content command compensating the saga",
       "generators": {
         "body": {
           "$.sagaId": {
             "type": "Uuid"
+          },
+          "$.userId": {
+            "type": "Uuid"
           }
         }
       },
@@ -74,6 +91,15 @@
                 "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
               }
             ]
+          },
+          "$.userId": {
+            "combine": "AND",
+            "matchers": [
+              {
+                "match": "regex",
+                "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+              }
+            ]
           }
         }
       },
@@ -85,12 +111,16 @@
       "contents": {
         "email": "leaver@example.com",
         "sagaId": "e2490de5-5bd3-43d5-b7c4-526e33f71304",
-        "type": "ERASE_USER_CONTENT"
+        "type": "ERASE_USER_CONTENT",
+        "userId": "e2490de5-5bd3-43d5-b7c4-526e33f71304"
       },
       "description": "an erase user content command closing the saga",
       "generators": {
         "body": {
           "$.sagaId": {
+            "type": "Uuid"
+          },
+          "$.userId": {
             "type": "Uuid"
           }
         }
@@ -106,6 +136,15 @@
             ]
           },
           "$.sagaId": {
+            "combine": "AND",
+            "matchers": [
+              {
+                "match": "regex",
+                "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+              }
+            ]
+          },
+          "$.userId": {
             "combine": "AND",
             "matchers": [
               {

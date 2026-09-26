@@ -1,5 +1,7 @@
 package com.jrobertgardzinski.collections.application;
 
+import java.util.Optional;
+import com.jrobertgardzinski.identity.UserId;
 import com.jrobertgardzinski.collections.domain.SavedItem;
 
 import java.time.Clock;
@@ -32,9 +34,13 @@ public class MarkUserItemsForErasure {
 
     /** Returns how many references were reserved by THIS delivery (zero on a redelivery). */
     public int execute(String user) {
+        return execute(user, Optional.empty());
+    }
+
+    public int execute(String user, Optional<UserId> userId) {
         Instant at = Instant.now(clock);
         int marked = 0;
-        for (SavedItem item : erasure.activeOf(user)) {
+        for (SavedItem item : erasure.activeOf(user, userId)) {
             // the transition is the aggregate's, never a setter and never an UPDATE spelled out
             // here: the record decides what "marked" means (including keeping the first instant on
             // a redelivery), and the port only stores the answer

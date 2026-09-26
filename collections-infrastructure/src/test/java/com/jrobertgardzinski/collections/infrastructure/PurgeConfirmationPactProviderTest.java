@@ -64,7 +64,7 @@ class PurgeConfirmationPactProviderTest {
         PurgeCommandsConsumer consumer = new PurgeCommandsConsumer(
                 new MarkUserItemsForErasure(null, null) {
                     @Override
-                    public int execute(String user) {
+                    public int execute(String user, java.util.Optional<com.jrobertgardzinski.identity.UserId> userId) {
                         return 1;
                     }
                 }, new RestoreUserItems(null), new PurgeUserItems(null), new ObjectMapper(), Observations.<Observation>silent());

@@ -1,5 +1,7 @@
 package com.jrobertgardzinski.collections.application;
 
+import java.util.Optional;
+import com.jrobertgardzinski.identity.UserId;
 import com.jrobertgardzinski.collections.domain.SavedItem;
 
 /**
@@ -29,8 +31,12 @@ public class RestoreUserItems {
 
     /** Returns how many references came back (zero on a redelivery, or if nothing was marked). */
     public int execute(String user) {
+        return execute(user, Optional.empty());
+    }
+
+    public int execute(String user, Optional<UserId> userId) {
         int restored = 0;
-        for (SavedItem item : erasure.pendingOf(user)) {
+        for (SavedItem item : erasure.pendingOf(user, userId)) {
             erasure.store(item.restore());
             restored++;
         }

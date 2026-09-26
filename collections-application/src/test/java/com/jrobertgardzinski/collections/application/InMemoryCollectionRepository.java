@@ -102,6 +102,41 @@ public class InMemoryCollectionRepository implements CollectionRepository, ItemR
         return itemsOf(user, true);
     }
 
+    @Override
+    public synchronized List<SavedItem> activeOf(UserId user) {
+        return itemsOf(user, false);
+    }
+
+    @Override
+    public synchronized List<SavedItem> pendingOf(UserId user) {
+        return itemsOf(user, true);
+    }
+
+    private List<SavedItem> itemsOf(UserId user, boolean marked) {
+        List<SavedItem> found = new ArrayList<>();
+        for (Map.Entry<Row, UserId> owned : ids.entrySet()) {
+            if (owned.getValue().equals(user) && marks.containsKey(owned.getKey()) == marked) {
+                found.add(itemOf(owned.getKey()));
+            }
+        }
+        return found;
+    }
+
+    @Override
+    public synchronized int eraseMarked(UserId user) {
+        int removed = 0;
+        for (SavedItem reserved : pendingOf(user)) {
+            Row row = new Row(reserved.user(), reserved.collection(), reserved.ref());
+            LinkedHashSet<ItemRef> set = data.get(new Key(row.user(), row.collection()));
+            if (set != null && set.remove(row.ref())) {
+                removed++;
+            }
+            marks.remove(row);
+            ids.remove(row);
+        }
+        return removed;
+    }
+
     private List<SavedItem> itemsOf(String user, boolean marked) {
         List<SavedItem> found = new ArrayList<>();
         for (Map.Entry<Key, LinkedHashSet<ItemRef>> entry : data.entrySet()) {
