@@ -102,6 +102,21 @@
             <artifactId>h2</artifactId>
             <version>2.4.240</version>
         </dependency>
+        <!-- the production dialect itself (postgres:18-alpine via Testcontainers), not only H2's
+             PostgreSQL mode — the same pattern as microservice-comments' PostgresDialectTest.
+             Skipped where Docker is absent, like memes' MinIO test. -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <version>${testcontainers.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${testcontainers.version}</version>
+            <scope>test</scope>
+        </dependency>
 
         <!-- account-deletion saga: consume PURGE_USER_CONTENT, confirm on usercollections-events -->
         <dependency>

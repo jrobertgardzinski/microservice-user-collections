@@ -42,6 +42,10 @@
         <junit-suite.version>6.1.2</junit-suite.version>
         <allure.version>2.35.4</allure.version>
         <pact.version>4.7.3</pact.version>
+        <!-- the same Testcontainers the workspace already runs (microservice-memes gets 1.21.2
+             from the Spring Boot 3.5.3 BOM; this Helidon build, like microservice-offboarding's,
+             pins it explicitly since no BOM here manages it) -->
+        <testcontainers.version>1.21.4</testcontainers.version>
         <!-- pinned here because there is no framework parent to pin them any more -->
         <compiler-plugin.version>3.15.0</compiler-plugin.version>
         <surefire-plugin.version>3.5.6</surefire-plugin.version>
