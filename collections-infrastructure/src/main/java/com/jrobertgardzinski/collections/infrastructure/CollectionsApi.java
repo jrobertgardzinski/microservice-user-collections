@@ -35,7 +35,7 @@ import java.util.Optional;
  */
 public class CollectionsApi implements HttpService {
 
-    // the schema's column widths (V1__collection_items.sql): anything longer would only surface
+    // the schema's column widths (V1__schema.sql): anything longer would only surface
     // as a SQLException deep in the JDBC store (a 500), so the boundary answers 400 up front
     private static final int MAX_COLLECTION_LENGTH = 64;
     private static final int MAX_ITEM_TYPE_LENGTH = 64;
