@@ -1,6 +1,9 @@
 package com.jrobertgardzinski.collections.domain;
 
+import com.jrobertgardzinski.identity.UserId;
+
 import java.time.Instant;
+import java.util.Optional;
 
 /**
  * One saved reference together with its erasure state: who saved it, into which collection, what it
@@ -18,8 +21,8 @@ import java.time.Instant;
  * FIRST instant: the mark's age is what the backlog alarm is measured against, and a redelivered
  * command must not make an old obligation look fresh.
  */
-public record SavedItem(String user, String collection, ItemRef ref, ItemStatus status,
-                        Instant markedForErasureAt) {
+public record SavedItem(String user, Optional<UserId> userId, String collection, ItemRef ref,
+                        ItemStatus status, Instant markedForErasureAt) {
 
     /**
      * The invariant, in the one place that can enforce it for values built in this process: a mark
@@ -36,9 +39,15 @@ public record SavedItem(String user, String collection, ItemRef ref, ItemStatus 
         }
     }
 
+    /** A row written before the id column, or a test that does not care about it. */
+    public SavedItem(String user, String collection, ItemRef ref, ItemStatus status,
+                     Instant markedForErasureAt) {
+        this(user, Optional.empty(), collection, ref, status, markedForErasureAt);
+    }
+
     /** A reference in somebody's list — the shorthand for every caller unrelated to erasure. */
     public SavedItem(String user, String collection, ItemRef ref) {
-        this(user, collection, ref, ItemStatus.ACTIVE, null);
+        this(user, Optional.empty(), collection, ref, ItemStatus.ACTIVE, null);
     }
 
     /**
@@ -49,7 +58,7 @@ public record SavedItem(String user, String collection, ItemRef ref, ItemStatus 
     public SavedItem markForErasure(Instant at) {
         return status == ItemStatus.PENDING_ERASURE
                 ? this
-                : new SavedItem(user, collection, ref, ItemStatus.PENDING_ERASURE, at);
+                : new SavedItem(user, userId, collection, ref, ItemStatus.PENDING_ERASURE, at);
     }
 
     /**
@@ -60,7 +69,7 @@ public record SavedItem(String user, String collection, ItemRef ref, ItemStatus 
     public SavedItem restore() {
         return status == ItemStatus.ACTIVE
                 ? this
-                : new SavedItem(user, collection, ref, ItemStatus.ACTIVE, null);
+                : new SavedItem(user, userId, collection, ref, ItemStatus.ACTIVE, null);
     }
 
     /** Whether a running saga has this reference reserved for erasure. */

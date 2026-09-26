@@ -1,6 +1,9 @@
 package com.jrobertgardzinski.collections.application;
 
 import com.jrobertgardzinski.collections.domain.ItemRef;
+import com.jrobertgardzinski.identity.UserId;
+
+import java.util.Optional;
 
 /**
  * The heap store the Gherkin scenarios (and account-closure-specs, via this module's test-jar) run
@@ -20,7 +23,7 @@ class InMemoryCollectionRepositoryTest extends ItemErasureContractTest {
     }
 
     @Override
-    protected void givenSavedItem(String user, String collection, ItemRef ref) {
-        store.add(user, collection, ref);
+    protected void givenSavedItem(String user, Optional<UserId> userId, String collection, ItemRef ref) {
+        store.add(user, userId, collection, ref);
     }
 }

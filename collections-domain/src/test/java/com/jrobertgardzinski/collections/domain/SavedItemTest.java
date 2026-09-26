@@ -6,7 +6,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
+import com.jrobertgardzinski.identity.UserId;
+
 import java.time.Instant;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -39,6 +42,18 @@ class SavedItemTest {
         assertEquals(ItemStatus.ACTIVE, item.status());
         assertEquals(null, item.markedForErasureAt());
         assertFalse(item.isPendingErasure());
+    }
+
+    @Test
+    @DisplayName("the owner's id survives both transitions")
+    void the_id_travels_with_the_row() {
+        UserId leaver = UserId.random();
+        SavedItem item = new SavedItem("leaver@example.com", Optional.of(leaver), "favourites",
+                new ItemRef("meme", "42"), ItemStatus.ACTIVE, null);
+
+        assertEquals(Optional.of(leaver), item.markForErasure(FIRST_DELIVERY).userId());
+        assertEquals(Optional.of(leaver), item.markForErasure(FIRST_DELIVERY).restore().userId());
+        assertEquals(Optional.empty(), inTheList().userId(), "a row without an id stays without one");
     }
 
     @Test

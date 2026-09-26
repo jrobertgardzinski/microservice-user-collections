@@ -23,6 +23,10 @@
             <artifactId>collections-config</artifactId>
         </dependency>
         <dependency>
+            <groupId>com.jrobertgardzinski</groupId>
+            <artifactId>user-id</artifactId>
+        </dependency>
+        <dependency>
             <!-- the port a service states its own facts through; the facts themselves stay ours -->
             <groupId>com.jrobertgardzinski</groupId>
             <artifactId>observation</artifactId>

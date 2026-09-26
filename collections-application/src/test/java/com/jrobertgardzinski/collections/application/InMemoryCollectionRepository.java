@@ -3,6 +3,7 @@ package com.jrobertgardzinski.collections.application;
 import com.jrobertgardzinski.collections.domain.ItemRef;
 import com.jrobertgardzinski.collections.domain.ItemStatus;
 import com.jrobertgardzinski.collections.domain.SavedItem;
+import com.jrobertgardzinski.identity.UserId;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -12,6 +13,7 @@ import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -47,10 +49,16 @@ public class InMemoryCollectionRepository implements CollectionRepository, ItemR
 
     private final Map<Key, LinkedHashSet<ItemRef>> data = new HashMap<>();
     private final Map<Row, Instant> marks = new HashMap<>();
+    /** The owner's id per row — the {@code user_id} column; absent for a save without one. */
+    private final Map<Row, UserId> ids = new HashMap<>();
 
     @Override
-    public synchronized boolean add(String user, String collection, ItemRef item) {
-        return data.computeIfAbsent(new Key(user, collection), k -> new LinkedHashSet<>()).add(item);
+    public synchronized boolean add(String user, Optional<UserId> userId, String collection, ItemRef item) {
+        boolean added = data.computeIfAbsent(new Key(user, collection), k -> new LinkedHashSet<>()).add(item);
+        if (added) {
+            userId.ifPresent(id -> ids.put(new Row(user, collection, item), id));
+        }
+        return added;
     }
 
     @Override
@@ -61,7 +69,11 @@ public class InMemoryCollectionRepository implements CollectionRepository, ItemR
             return false;
         }
         LinkedHashSet<ItemRef> set = data.get(new Key(user, collection));
-        return set != null && set.remove(item);
+        boolean removed = set != null && set.remove(item);
+        if (removed) {
+            ids.remove(new Row(user, collection, item));
+        }
+        return removed;
     }
 
     @Override
@@ -125,6 +137,7 @@ public class InMemoryCollectionRepository implements CollectionRepository, ItemR
                 removed++;
             }
             marks.remove(new Row(user, reserved.collection(), reserved.ref()));
+            ids.remove(new Row(user, reserved.collection(), reserved.ref()));
         }
         return removed;
     }
@@ -155,7 +168,7 @@ public class InMemoryCollectionRepository implements CollectionRepository, ItemR
 
     private SavedItem itemOf(Row row) {
         Instant marked = marks.get(row);
-        return new SavedItem(row.user(), row.collection(), row.ref(),
+        return new SavedItem(row.user(), Optional.ofNullable(ids.get(row)), row.collection(), row.ref(),
                 marked == null ? ItemStatus.ACTIVE : ItemStatus.PENDING_ERASURE, marked);
     }
 
@@ -180,7 +193,9 @@ public class InMemoryCollectionRepository implements CollectionRepository, ItemR
             for (ItemRef ref : doomed) {
                 if (entry.getValue().remove(ref)) {
                     removed++;
-                    marks.remove(new Row(entry.getKey().user(), entry.getKey().collection(), ref));
+                    Row row = new Row(entry.getKey().user(), entry.getKey().collection(), ref);
+                    marks.remove(row);
+                    ids.remove(row);
                 }
             }
         }

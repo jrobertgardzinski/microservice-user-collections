@@ -4,6 +4,7 @@ import com.jrobertgardzinski.collections.application.ItemErasure;
 import com.jrobertgardzinski.collections.domain.ItemRef;
 import com.jrobertgardzinski.collections.domain.ItemStatus;
 import com.jrobertgardzinski.collections.domain.SavedItem;
+import com.jrobertgardzinski.identity.UserId;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
@@ -14,6 +15,8 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 
 /**
  * The one adapter in this service allowed to name the {@code collection_items} table in a READ —
@@ -46,7 +49,7 @@ public class JdbcItemErasure implements ItemErasure {
     private List<SavedItem> byUserAndStatus(String user, ItemStatus status) {
         try (Connection c = dataSource.getConnection();
              PreparedStatement ps = c.prepareStatement(
-                     "SELECT collection, item_type, item_id, status, marked_for_erasure_at "
+                     "SELECT user_id, collection, item_type, item_id, status, marked_for_erasure_at "
                              + "FROM collection_items WHERE user_email = ? AND status = ?")) {
             ps.setString(1, user);
             ps.setString(2, status.name());
@@ -104,7 +107,7 @@ public class JdbcItemErasure implements ItemErasure {
     public List<SavedItem> pendingSince(Instant cutoff) {
         try (Connection c = dataSource.getConnection();
              PreparedStatement ps = c.prepareStatement(
-                     "SELECT user_email, collection, item_type, item_id, status, "
+                     "SELECT user_email, user_id, collection, item_type, item_id, status, "
                              + "marked_for_erasure_at FROM collection_items "
                              + "WHERE status = ? AND marked_for_erasure_at < ?")) {
             ps.setString(1, ItemStatus.PENDING_ERASURE.name());
@@ -123,7 +126,8 @@ public class JdbcItemErasure implements ItemErasure {
 
     private static SavedItem itemOf(String user, ResultSet rs) throws SQLException {
         Timestamp marked = rs.getTimestamp("marked_for_erasure_at");
-        return new SavedItem(user, rs.getString("collection"),
+        UUID id = rs.getObject("user_id", UUID.class);
+        return new SavedItem(user, Optional.ofNullable(id).map(UserId::new), rs.getString("collection"),
                 new ItemRef(rs.getString("item_type"), rs.getString("item_id")),
                 ItemStatus.valueOf(rs.getString("status")),
                 marked == null ? null : marked.toInstant());

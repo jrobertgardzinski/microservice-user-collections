@@ -31,6 +31,10 @@ jobs:
         with:
           repository: jrobertgardzinski/observation
           path: observation
+      - uses: actions/checkout@v7
+        with:
+          repository: jrobertgardzinski/user-id
+          path: user-id
       # the closure vocabulary shared with identity and the orchestrator
       - uses: actions/checkout@v7
         with:
@@ -46,6 +50,7 @@ jobs:
         run: |
           mvn -B -q --no-transfer-progress -f offline-jwt/pom.xml install -DskipTests
           mvn -B -q --no-transfer-progress -f observation/pom.xml install -DskipTests
+          mvn -B -q --no-transfer-progress -f user-id/pom.xml install -DskipTests
           mvn -B -q --no-transfer-progress -f account-closure/pom.xml install -DskipTests
       - name: Build and test (including pact provider verification)
         run: mvn -B --no-transfer-progress -f microservice-user-collections/pom.xml clean verify

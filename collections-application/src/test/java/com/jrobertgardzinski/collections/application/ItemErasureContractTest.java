@@ -2,11 +2,13 @@ package com.jrobertgardzinski.collections.application;
 
 import com.jrobertgardzinski.collections.domain.ItemRef;
 import com.jrobertgardzinski.collections.domain.SavedItem;
+import com.jrobertgardzinski.identity.UserId;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -37,7 +39,12 @@ public abstract class ItemErasureContractTest {
     protected abstract ItemErasure erasure();
 
     /** Put an ACTIVE saved reference in, however this implementation stores one. */
-    protected abstract void givenSavedItem(String user, String collection, ItemRef ref);
+    protected abstract void givenSavedItem(String user, Optional<UserId> userId, String collection,
+                                           ItemRef ref);
+
+    private void givenSavedItem(String user, String collection, ItemRef ref) {
+        givenSavedItem(user, Optional.empty(), collection, ref);
+    }
 
     private ItemRef ref(String id) {
         return new ItemRef("meme", id + "-" + run);
@@ -62,6 +69,23 @@ public abstract class ItemErasureContractTest {
 
         assertEquals(List.of(), erasure().activeOf(bob));
         assertEquals(NOON, theOnly(erasure().pendingOf(bob)).markedForErasureAt());
+    }
+
+    @Test
+    @DisplayName("the owner's id is read back exactly as it was saved, through every transition")
+    protected void the_id_round_trips() {
+        UserId aliceId = UserId.random();
+        givenSavedItem(alice, Optional.of(aliceId), LIST, ref("one"));
+        givenSavedItem(bob, LIST, ref("two"));
+
+        assertEquals(Optional.of(aliceId), theOnly(erasure().activeOf(alice)).userId());
+        assertEquals(Optional.empty(), theOnly(erasure().activeOf(bob)).userId(),
+                "a row saved without an id has none to report");
+
+        erasure().store(theOnly(erasure().activeOf(alice)).markForErasure(NOON));
+        assertEquals(Optional.of(aliceId), theOnly(erasure().pendingOf(alice)).userId());
+        assertEquals(Optional.of(aliceId), theOnly(erasure().pendingSince(NOON.plusSeconds(1))
+                .stream().filter(item -> item.user().equals(alice)).toList()).userId());
     }
 
     @Test

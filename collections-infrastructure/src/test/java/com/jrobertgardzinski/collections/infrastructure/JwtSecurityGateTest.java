@@ -1,6 +1,7 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jrobertgardzinski.identity.UserId;
 import io.qameta.allure.Epic;
 import io.qameta.allure.Feature;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,6 +16,8 @@ import java.security.interfaces.EdECPublicKey;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -43,7 +46,19 @@ class JwtSecurityGateTest {
     void accepts_a_valid_token_and_reads_the_user() throws Exception {
         String token = token("k1", "microservice-security", "alice@example.com",
                 Instant.now().plusSeconds(3600), keys);
-        assertEquals("alice@example.com", gate.userFor(token).orElseThrow());
+        Caller caller = gate.callerFor(token).orElseThrow();
+        assertEquals("alice@example.com", caller.email());
+        assertEquals(Optional.empty(), caller.userId(), "an address as subject carries no id");
+    }
+
+    @Test
+    void reads_the_id_from_the_subject_and_the_address_from_its_claim() throws Exception {
+        UUID id = UUID.randomUUID();
+        String token = token("k1", "microservice-security", id.toString(), "alice@example.com",
+                Instant.now().plusSeconds(3600), keys);
+        Caller caller = gate.callerFor(token).orElseThrow();
+        assertEquals("alice@example.com", caller.email());
+        assertEquals(Optional.of(new UserId(id)), caller.userId());
     }
 
     @Test
@@ -60,21 +75,21 @@ class JwtSecurityGateTest {
         byte[] sig = Base64.getUrlDecoder().decode(token.substring(dot + 1));
         sig[0] ^= 0x01;
         String tampered = token.substring(0, dot + 1) + B64.encodeToString(sig);
-        assertTrue(gate.userFor(tampered).isEmpty());
+        assertTrue(gate.callerFor(tampered).isEmpty());
     }
 
     @Test
     void rejects_an_expired_token() throws Exception {
         String token = token("k1", "microservice-security", "alice@example.com",
                 Instant.now().minusSeconds(60), keys);
-        assertTrue(gate.userFor(token).isEmpty());
+        assertTrue(gate.callerFor(token).isEmpty());
     }
 
     @Test
     void rejects_a_foreign_issuer() throws Exception {
         String token = token("k1", "someone-else", "alice@example.com",
                 Instant.now().plusSeconds(3600), keys);
-        assertTrue(gate.userFor(token).isEmpty());
+        assertTrue(gate.callerFor(token).isEmpty());
     }
 
     @Test
@@ -82,15 +97,21 @@ class JwtSecurityGateTest {
         KeyPair stranger = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
         String token = token("k1", "microservice-security", "alice@example.com",
                 Instant.now().plusSeconds(3600), stranger);
-        assertTrue(gate.userFor(token).isEmpty());
+        assertTrue(gate.callerFor(token).isEmpty());
     }
 
     private static String token(String kid, String issuer, String subject, Instant expiry, KeyPair signer)
             throws Exception {
+        return token(kid, issuer, subject, null, expiry, signer);
+    }
+
+    private static String token(String kid, String issuer, String subject, String email, Instant expiry,
+                                KeyPair signer) throws Exception {
         String header = B64.encodeToString(("{\"alg\":\"EdDSA\",\"kid\":\"" + kid + "\"}")
                 .getBytes(StandardCharsets.UTF_8));
+        String emailClaim = email == null ? "" : ",\"email\":\"" + email + "\"";
         String claims = B64.encodeToString(("{\"iss\":\"" + issuer + "\",\"sub\":\"" + subject
-                + "\",\"exp\":" + expiry.getEpochSecond() + "}").getBytes(StandardCharsets.UTF_8));
+                + "\"" + emailClaim + ",\"exp\":" + expiry.getEpochSecond() + "}").getBytes(StandardCharsets.UTF_8));
         Signature signature = Signature.getInstance("Ed25519");
         signature.initSign(signer.getPrivate());
         signature.update((header + "." + claims).getBytes(StandardCharsets.US_ASCII));

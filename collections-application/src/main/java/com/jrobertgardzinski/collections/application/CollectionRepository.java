@@ -1,8 +1,10 @@
 package com.jrobertgardzinski.collections.application;
 
 import com.jrobertgardzinski.collections.domain.ItemRef;
+import com.jrobertgardzinski.identity.UserId;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * The persistence port. A user owns named collections (e.g. {@code "favourites"}, {@code "saved"});
@@ -18,8 +20,17 @@ import java.util.List;
  */
 public interface CollectionRepository {
 
-    /** Adds the ref to the user's collection; returns true only if it was not already there. */
-    boolean add(String user, String collection, ItemRef item);
+    /**
+     * Adds the ref to the user's collection; returns true only if it was not already there. The id
+     * is the owner's stable identity and is stored beside the address; empty for a token that
+     * predates it.
+     */
+    boolean add(String user, Optional<UserId> userId, String collection, ItemRef item);
+
+    /** The same save for a caller that knows only the address. */
+    default boolean add(String user, String collection, ItemRef item) {
+        return add(user, Optional.empty(), collection, item);
+    }
 
     /** Removes the ref; returns true only if it was there. */
     boolean remove(String user, String collection, ItemRef item);

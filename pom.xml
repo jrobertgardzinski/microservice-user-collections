@@ -84,6 +84,11 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+            <dependency>
+                <groupId>com.jrobertgardzinski</groupId>
+                <artifactId>user-id</artifactId>
+                <version>1.0.0-SNAPSHOT</version>
+            </dependency>
             <!-- this service's own layers: one version, the reactor's -->
             <dependency>
                 <groupId>com.jrobertgardzinski</groupId>

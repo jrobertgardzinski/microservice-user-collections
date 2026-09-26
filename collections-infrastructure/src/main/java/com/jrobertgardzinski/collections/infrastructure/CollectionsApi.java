@@ -62,8 +62,8 @@ public class CollectionsApi implements HttpService {
     }
 
     private void save(ServerRequest req, ServerResponse res) {
-        Optional<String> user = authenticate(req);
-        if (user.isEmpty()) {
+        Optional<Caller> caller = authenticate(req);
+        if (caller.isEmpty()) {
             refuse(res, Status.UNAUTHORIZED_401, "UNAUTHENTICATED");
             return;
         }
@@ -72,13 +72,13 @@ public class CollectionsApi implements HttpService {
             refuse(res, Status.BAD_REQUEST_400, tooLong);
             return;
         }
-        SaveItem.Status status = saveItem.execute(user.get(),
+        SaveItem.Status status = saveItem.execute(caller.get().email(), caller.get().userId(),
                 req.path().pathParameters().get("collection"), itemOf(req));
         res.status(status == SaveItem.Status.SAVED ? Status.CREATED_201 : Status.OK_200).send();
     }
 
     private void remove(ServerRequest req, ServerResponse res) {
-        Optional<String> user = authenticate(req);
+        Optional<String> user = authenticate(req).map(Caller::email);
         if (user.isEmpty()) {
             refuse(res, Status.UNAUTHORIZED_401, "UNAUTHENTICATED");
             return;
@@ -98,7 +98,7 @@ public class CollectionsApi implements HttpService {
     }
 
     private void list(ServerRequest req, ServerResponse res) {
-        Optional<String> user = authenticate(req);
+        Optional<String> user = authenticate(req).map(Caller::email);
         if (user.isEmpty()) {
             refuse(res, Status.UNAUTHORIZED_401, "UNAUTHENTICATED");
             return;
@@ -156,10 +156,10 @@ public class CollectionsApi implements HttpService {
                 req.path().pathParameters().get("itemId"));
     }
 
-    private Optional<String> authenticate(ServerRequest req) {
+    private Optional<Caller> authenticate(ServerRequest req) {
         return req.headers().first(HeaderNames.AUTHORIZATION)
                 .filter(header -> header.startsWith("Bearer "))
                 .map(header -> header.substring("Bearer ".length()))
-                .flatMap(gate::userFor);
+                .flatMap(gate::callerFor);
     }
 }

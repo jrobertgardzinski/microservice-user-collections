@@ -4,14 +4,17 @@ import com.jrobertgardzinski.collections.application.CollectionRepository;
 import com.jrobertgardzinski.collections.application.ItemReferences;
 import com.jrobertgardzinski.collections.domain.ItemRef;
 import com.jrobertgardzinski.collections.domain.ItemStatus;
+import com.jrobertgardzinski.identity.UserId;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Types;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * The durable {@link CollectionRepository}: rows in {@code collection_items}, served by Postgres in prod
@@ -49,18 +52,23 @@ public class JdbcCollectionRepository implements CollectionRepository, ItemRefer
     }
 
     @Override
-    public boolean add(String user, String collection, ItemRef item) {
+    public boolean add(String user, Optional<UserId> userId, String collection, ItemRef item) {
         // INSERT names the table, not the view, and must: a view is not what a row is written to.
         // The UNIQUE constraint underneath spans rows of BOTH statuses, so saving something a
         // running saga has reserved is read as "already saved" rather than duplicated — see V3
         try (Connection c = dataSource.getConnection();
              PreparedStatement ps = c.prepareStatement(
-                     "INSERT INTO collection_items (user_email, collection, item_type, item_id) "
-                             + "VALUES (?, ?, ?, ?)")) {
+                     "INSERT INTO collection_items (user_email, user_id, collection, item_type, item_id) "
+                             + "VALUES (?, ?, ?, ?, ?)")) {
             ps.setString(1, user);
-            ps.setString(2, collection);
-            ps.setString(3, item.itemType());
-            ps.setString(4, item.itemId());
+            if (userId.isPresent()) {
+                ps.setObject(2, userId.get().value());
+            } else {
+                ps.setNull(2, Types.OTHER);
+            }
+            ps.setString(3, collection);
+            ps.setString(4, item.itemType());
+            ps.setString(5, item.itemId());
             ps.executeUpdate();
             return true;
         } catch (SQLException e) {
