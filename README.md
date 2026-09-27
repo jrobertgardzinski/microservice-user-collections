@@ -58,8 +58,8 @@ points at.
   not notice. Every row is keyed by the member's id (`collection_items.user_id`, from the JWT's
   `sub`; `uq_collection_item` is keyed by it too), so a rename changes nothing here and there is no
   third Kafka loop any more — the consumer that listened for `EMAIL_CHANGED` and the rekey it drove
-  are gone with the cutover (workspace ADR 0008). This service keeps no address at all: it stores
-  references, and the only name it would ever show comes from security at read time. A build-time
+  are gone with the cutover (workspace ADR 0008). This service keeps no address at all — and no name
+  either: a list is references, and who owns it is the id the token carried. A build-time
   guard (`RetiredAddressKeyTest`) fails the suite if an address-shaped column or the retired
   machinery comes back. The confirmation sent on `usercollections-events` still carries `reserved`
   — how many references the mark actually took out of the member's lists — and a zero still raises
