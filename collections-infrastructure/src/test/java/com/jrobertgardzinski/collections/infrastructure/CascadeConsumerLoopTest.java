@@ -1,5 +1,6 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
+import com.jrobertgardzinski.collections.deletion.CollectionsDeletionParticipant;
 import static com.jrobertgardzinski.collections.application.TestUsers.u;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jrobertgardzinski.collections.application.InMemoryCollectionRepository;
@@ -146,7 +147,7 @@ class CascadeConsumerLoopTest {
         store.add(u("alice@example.com"), "favourites", new ItemRef("comment", COMMENT_1));
         AtomicInteger memeAttempts = new AtomicInteger();
         ItemReferences brokenForMemesOnly = (itemType, itemIds) -> {
-            if (CascadeConsumer.MEME_ITEM_TYPE.equals(itemType)) {
+            if (CollectionsDeletionParticipant.MEME_ITEM_TYPE.equals(itemType)) {
                 memeAttempts.incrementAndGet();
                 throw new IllegalStateException("database permanently away for this one");
             }

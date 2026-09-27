@@ -39,6 +39,17 @@
             <artifactId>collections_account-closure</artifactId>
         </dependency>
         <dependency>
+            <!-- this service's hop of the deletion cascade: the decisions, without the wire -->
+            <groupId>com.jrobertgardzinski</groupId>
+            <artifactId>collections_meme-deletion</artifactId>
+        </dependency>
+        <dependency>
+            <!-- the message names and fields the cascade's three services share -->
+            <groupId>com.jrobertgardzinski</groupId>
+            <artifactId>meme-deletion</artifactId>
+            <version>1.0.0-SNAPSHOT</version>
+        </dependency>
+        <dependency>
             <groupId>com.jrobertgardzinski</groupId>
             <artifactId>collections-domain</artifactId>
         </dependency>

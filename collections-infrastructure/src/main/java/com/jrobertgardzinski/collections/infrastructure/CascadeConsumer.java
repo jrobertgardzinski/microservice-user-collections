@@ -3,6 +3,11 @@ package com.jrobertgardzinski.collections.infrastructure;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jrobertgardzinski.collections.application.PurgeDeletedItem;
+import com.jrobertgardzinski.collections.deletion.CollectionsDeletionParticipant;
+import com.jrobertgardzinski.deletion.CommentsDeleted;
+import com.jrobertgardzinski.deletion.DeletionMessages;
+import com.jrobertgardzinski.deletion.DeletionOutcome;
+import com.jrobertgardzinski.deletion.MemeDeleted;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
@@ -18,7 +23,6 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
-import java.util.UUID;
 
 /**
  * The DELETION CASCADE: when a meme dies, the references to it die with it, and so do the
@@ -72,17 +76,24 @@ import java.util.UUID;
  *
  * <h2>The rules, in full</h2>
  *
+ * <p>What is left in this class is TRANSPORT: the poll, the batch ceiling, the retry, the give-up,
+ * the correlation id and the topic-to-type dispatch. What the cascade DECIDES — what counts as an
+ * id, what a deletion that names nothing means, which item type each event purges — moved to
+ * {@link CollectionsDeletionParticipant} and the {@code meme-deletion} library, where the other
+ * hop can be held to the same promises. The rules below are the ones this loop still owns.
+ *
  * <ul>
  *   <li><b>Foreign types are silence.</b> Both topics are shared. {@code comments-events} also
  *       carries the saga's {@code USER_CONTENT_PURGED} confirmations and ordinary comment
  *       lifecycle events; {@code memes-events} carries the rest of a meme's life. Anything that
  *       is not ours is skipped without a log line — a WARN per foreign event would drown the real
  *       ones.</li>
- *   <li><b>Poison pills are dropped, never echoed.</b> Unparseable JSON, or an event whose id is
- *       missing or is not an id at all, cannot be fixed by any retry, so it is committed away
- *       with a WARN that reports the SHAPE of the problem and never the payload. Ids are not PII,
- *       and the {@code memeId} is logged deliberately — it is the one handle an operator has on
- *       what went past.</li>
+ *   <li><b>Poison pills are dropped, never echoed.</b> Unparseable JSON is dropped here; an event
+ *       whose id is missing or is not an id at all is turned away by {@code MemeDeleted.of} /
+ *       {@code CommentsDeleted.of} and dropped here. Neither can be fixed by any retry, so both
+ *       are committed away with a WARN that reports the SHAPE of the problem and never the
+ *       payload. Ids are not PII, and the {@code memeId} is logged deliberately — it is the one
+ *       handle an operator has on what went past.</li>
  *   <li><b>A failed purge is retried a few times, then abandoned.</b> A database hiccup should
  *       not cost a cleanup, so a failing record is re-tried in place ({@link #MAX_ATTEMPTS}
  *       attempts, short backoff, no rewind needed — the batch is already in memory and the purge
@@ -106,10 +117,6 @@ public class CascadeConsumer {
     static final String GROUP_ID = "user-collections-cascade";
 
     static final String CID_HEADER = "X-Correlation-Id";
-
-    /** The two item types this service's refs use for the two cascading sources. */
-    static final String MEME_ITEM_TYPE = "meme";
-    static final String COMMENT_ITEM_TYPE = "comment";
 
     static final Duration POLL_EVERY = Duration.ofSeconds(1);
 
@@ -144,19 +151,9 @@ public class CascadeConsumer {
     static final int MAX_ATTEMPTS = 3;
     static final Duration RETRY_BACKOFF = Duration.ofSeconds(1);
 
-    /**
-     * A canonical UUID is 36 characters. Both event contracts spell their ids as uuids, so
-     * anything else on the wire is a mis-produced event rather than an id this service has simply
-     * never seen — and {@link UUID#fromString} alone would accept lax forms like {@code 1-1-1-1-1}.
-     * Note what this does NOT do: it does not judge the ids already stored. {@link
-     * com.jrobertgardzinski.collections.domain.ItemRef} is opaque by design; this check belongs to
-     * the EVENT contract, at the boundary, which is exactly where a boundary check belongs.
-     */
-    private static final int UUID_LENGTH = 36;
-
     private static final Logger LOG = LoggerFactory.getLogger(CascadeConsumer.class);
 
-    private final PurgeDeletedItem purgeDeletedItem;
+    private final CollectionsDeletionParticipant participant;
     private final ObjectMapper mapper;
     private final long retryBackoffMillis;
 
@@ -167,7 +164,7 @@ public class CascadeConsumer {
     /** Test seam: the loop-under-test retries in milliseconds instead of sleeping out seconds. */
     CascadeConsumer(PurgeDeletedItem purgeDeletedItem, ObjectMapper mapper,
                     long retryBackoffMillis) {
-        this.purgeDeletedItem = purgeDeletedItem;
+        this.participant = new CollectionsDeletionParticipant(purgeDeletedItem);
         this.mapper = mapper;
         this.retryBackoffMillis = retryBackoffMillis;
     }
@@ -191,11 +188,11 @@ public class CascadeConsumer {
                     topic, payload == null ? 0 : payload.length());
             return 0;
         }
-        String type = event.path("type").asText();
-        if (MEMES_TOPIC.equals(topic) && "MEME_DELETED".equals(type)) {
+        String type = event.path(DeletionMessages.Field.TYPE).asText();
+        if (MEMES_TOPIC.equals(topic) && DeletionMessages.MEME_DELETED.equals(type)) {
             return onMemeDeleted(event);
         }
-        if (COMMENTS_TOPIC.equals(topic) && "COMMENTS_DELETED".equals(type)) {
+        if (COMMENTS_TOPIC.equals(topic) && DeletionMessages.COMMENTS_DELETED.equals(type)) {
             return onCommentsDeleted(event);
         }
         // both topics are shared with other conversations (comments-events carries the saga's own
@@ -205,15 +202,20 @@ public class CascadeConsumer {
 
     /** {@code MEME_DELETED}: every ref to the meme itself. */
     private int onMemeDeleted(JsonNode event) {
-        String memeId = event.path("memeId").asText();
-        if (isNotAnId(memeId)) {
-            // a deletion that names nothing: no retry can invent the id, so it is committed away
-            LOG.warn("dropping a MEME_DELETED whose memeId is missing or is not an id");
-            return 0;
-        }
-        int removed = purgeDeletedItem.execute(MEME_ITEM_TYPE, List.of(memeId));
-        LOG.info("cascade removed {} collection refs to deleted meme {}", removed, memeId);
-        return removed;
+        String memeId = event.path(DeletionMessages.Field.MEME_ID).asText();
+        return MemeDeleted.of(memeId)
+                .map(memeDeleted -> {
+                    int removed = rowsOf(participant.handle(memeDeleted));
+                    LOG.info("cascade removed {} collection refs to deleted meme {}",
+                            removed, memeDeleted.memeId());
+                    return removed;
+                })
+                .orElseGet(() -> {
+                    // a deletion that names nothing: no retry can invent the id, so it is
+                    // committed away
+                    LOG.warn("dropping a MEME_DELETED whose memeId is missing or is not an id");
+                    return 0;
+                });
     }
 
     /**
@@ -223,45 +225,32 @@ public class CascadeConsumer {
      * nobody can audit.
      */
     private int onCommentsDeleted(JsonNode event) {
-        String memeId = event.path("memeId").asText();
-        if (isNotAnId(memeId)) {
-            LOG.warn("dropping a COMMENTS_DELETED whose memeId is missing or is not an id");
-            return 0;
-        }
-        List<String> commentIds = new ArrayList<>();
-        int unusable = 0;
-        for (JsonNode id : event.path("commentIds")) {
-            String commentId = id.asText();
-            if (isNotAnId(commentId)) {
-                unusable++;
-            } else {
-                commentIds.add(commentId);
-            }
-        }
-        if (unusable > 0) {
-            // partial poison: purge what CAN be purged rather than abandoning the whole event —
-            // best-effort means every ref we can honestly account for still goes. The count, not
-            // the ids, because a garbage id is untrusted content
-            LOG.warn("{} of the ids in a COMMENTS_DELETED for meme {} are not ids and were"
-                    + " skipped", unusable, memeId);
-        }
-        int removed = purgeDeletedItem.execute(COMMENT_ITEM_TYPE, commentIds);
-        LOG.info("cascade removed {} collection refs to {} deleted comments of meme {}",
-                removed, commentIds.size(), memeId);
-        return removed;
+        List<String> ids = new ArrayList<>();
+        event.path(DeletionMessages.Field.COMMENT_IDS).forEach(id -> ids.add(id.asText()));
+        return CommentsDeleted.of(event.path(DeletionMessages.Field.MEME_ID).asText(), ids)
+                .map(commentsDeleted -> {
+                    if (commentsDeleted.unusable() > 0) {
+                        // partial poison: purge what CAN be purged rather than abandoning the
+                        // whole event — best-effort means every ref we can honestly account for
+                        // still goes. The count, not the ids, because a garbage id is untrusted
+                        // content
+                        LOG.warn("{} of the ids in a COMMENTS_DELETED for meme {} are not ids and"
+                                        + " were skipped",
+                                commentsDeleted.unusable(), commentsDeleted.memeId());
+                    }
+                    int removed = rowsOf(participant.handle(commentsDeleted));
+                    LOG.info("cascade removed {} collection refs to {} deleted comments of meme {}",
+                            removed, commentsDeleted.commentIds().size(), commentsDeleted.memeId());
+                    return removed;
+                })
+                .orElseGet(() -> {
+                    LOG.warn("dropping a COMMENTS_DELETED whose memeId is missing or is not an id");
+                    return 0;
+                });
     }
 
-    /** The boundary's id check — see {@link #UUID_LENGTH} for why the contract, not the domain. */
-    private static boolean isNotAnId(String value) {
-        if (value == null || value.length() != UUID_LENGTH) {
-            return true;
-        }
-        try {
-            UUID.fromString(value);
-            return false;
-        } catch (IllegalArgumentException notAnId) {
-            return true;
-        }
+    private static int rowsOf(DeletionOutcome outcome) {
+        return outcome instanceof DeletionOutcome.Dropped dropped ? dropped.rows() : 0;
     }
 
     /**
