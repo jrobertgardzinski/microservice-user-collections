@@ -18,7 +18,7 @@ import java.util.Set;
 /**
  * A heap-only {@link CollectionRepository} for the tests that want no JDBC at all — this module's
  * own unit tests, {@code collections-infrastructure}'s HTTP scenarios and (via this module's
- * test-jar) account-closure-specs. The running service never uses it. A {@link LinkedHashSet} per
+ * test-jar) portal-specs. The running service never uses it. A {@link LinkedHashSet} per
  * (user, collection) gives set semantics (idempotent save) while remembering insertion order for a
  * newest-first listing. Coarse {@code synchronized} methods are the whole concurrency story.
  *

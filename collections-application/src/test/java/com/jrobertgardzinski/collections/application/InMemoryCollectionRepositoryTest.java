@@ -5,7 +5,7 @@ import com.jrobertgardzinski.identity.UserId;
 
 
 /**
- * The heap store the Gherkin scenarios (and account-closure-specs, via this module's test-jar) run
+ * The heap store the Gherkin scenarios (and portal-specs, via this module's test-jar) run
  * on, held to what the JDBC adapter promises. It used to ship inside the service jar in
  * collections-infrastructure — the one stand-in in the estate most likely to be mistaken for
  * reviewed production code, since its own javadoc had to say the running service never uses it.
