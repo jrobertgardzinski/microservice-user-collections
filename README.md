@@ -48,24 +48,22 @@ points at.
   service cannot close alone: the gate here is **offline**, so the leaver's own access token keeps
   being accepted for up to its `exp` (an hour by default) after the deletion starts, and a save in
   that window lands ACTIVE — outside the mark, so outside the closure. Such a row is not deleted
-  (the address may since have been taken by somebody else, and a wholesale delete on a redelivered
-  closure would empty *their* list), it is **counted**: `collections_erasure_residue_total` plus a
-  WARN naming the saga, so a reference standing under an erased address can be found and removed by
-  hand. Closing it properly needs a revocation signal from security (or an online check per
+  (a wholesale delete on a redelivered closure would destroy references the closure never marked,
+  and since the key is an id the estate never reassigns, nobody else's list is at risk either), it
+  is **counted**: `collections_erasure_residue_total` plus a WARN naming the saga, so a reference
+  left standing after an erasure can be found and removed by hand. Closing it properly needs a revocation signal from security (or an online check per
   request) — the reservation itself is safe meanwhile: a reserved row is invisible in every listing
   and a `DELETE` from that same stale tab reports "not there" rather than destroying it.
-- **microservice-security, the other direction** — a member's address can move, and their saved
-  references move with it. Every row here is keyed by the address the token carried
-  (`collection_items.user_email`, the JWT's `sub`), so when security confirms a change of address it
-  announces `EMAIL_CHANGED` on `security-events` and this service re-keys those rows
-  (`SecurityEventsConsumer` → `RekeyUserItems`). Without it a member's lists simply read back `[]`
-  with no error, and their later deletion marked nothing while confirming an erasure, leaving the
-  references under an address the next registrant would inherit. It is a third Kafka loop, in its
-  own consumer group, watched by both probes and stopped by the same hook. The two topics are
-  independent, so a deletion can still overtake a rename; that is why the confirmation sent on
-  `usercollections-events` carries `reserved` — how many references the mark actually took out of
-  the member's lists — and why a zero raises `collections_saga_purge_reserved_nothing_total`
-  instead of reading as a successful erasure.
+- **microservice-security, the other direction** — a member's address can move, and their lists do
+  not notice. Every row is keyed by the member's id (`collection_items.user_id`, from the JWT's
+  `sub`; `uq_collection_item` is keyed by it too), so a rename changes nothing here and there is no
+  third Kafka loop any more — the consumer that listened for `EMAIL_CHANGED` and the rekey it drove
+  are gone with the cutover (workspace ADR 0008). This service keeps no address at all: it stores
+  references, and the only name it would ever show comes from security at read time. A build-time
+  guard (`RetiredAddressKeyTest`) fails the suite if an address-shaped column or the retired
+  machinery comes back. The confirmation sent on `usercollections-events` still carries `reserved`
+  — how many references the mark actually took out of the member's lists — and a zero still raises
+  `collections_saga_purge_reserved_nothing_total` instead of reading as a successful erasure.
 - **collections-ui** (port 8093) — the favourites UI on its own origin, so the CORS conversation
   is real: an allowlisted origin gets its echo and a fully-answered preflight, a foreign one gets
   no CORS headers at all.
