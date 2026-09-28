@@ -19,6 +19,11 @@ jobs:
         with:
           path: microservice-user-collections
       # consumer of this service's confirmations — checkout only (its pacts/), no build
+      # the portal's own vocabulary: one repository since 2026-09-28, three before that
+      - uses: actions/checkout@v7
+        with:
+          repository: jrobertgardzinski/portal-libs
+          path: portal-libs
       - uses: actions/checkout@v7
         with:
           repository: jrobertgardzinski/microservice-offboarding
@@ -42,10 +47,6 @@ jobs:
           path: unit-of-work
       - uses: actions/checkout@v7
         with:
-          repository: jrobertgardzinski/meme-deletion
-          path: meme-deletion
-      - uses: actions/checkout@v7
-        with:
           repository: jrobertgardzinski/account-closure
           path: account-closure
       - name: Set up JDK 25
@@ -60,8 +61,8 @@ jobs:
           mvn -B -q --no-transfer-progress -f observation/pom.xml install -DskipTests
           mvn -B -q --no-transfer-progress -f user-id/pom.xml install -DskipTests
           mvn -B -q --no-transfer-progress -f unit-of-work/pom.xml install -DskipTests
-          mvn -B -q --no-transfer-progress -f meme-deletion/pom.xml install -DskipTests
           mvn -B -q --no-transfer-progress -f account-closure/pom.xml install -DskipTests
+          mvn -B -q --no-transfer-progress -f portal-libs/pom.xml install -DskipTests
       - name: Build and test (including pact provider verification)
         run: mvn -B --no-transfer-progress -f microservice-user-collections/pom.xml clean verify
 
