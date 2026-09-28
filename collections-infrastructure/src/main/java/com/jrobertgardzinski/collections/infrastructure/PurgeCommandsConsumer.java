@@ -4,7 +4,7 @@ import com.jrobertgardzinski.closure.ClosureCommand;
 import com.jrobertgardzinski.closure.ClosureConfirmation;
 import com.jrobertgardzinski.closure.ClosureMessages;
 import com.jrobertgardzinski.collections.closure.CollectionsClosureParticipant;
-import com.jrobertgardzinski.collections.closure.ClosureOutcome;
+import com.jrobertgardzinski.closure.ClosureOutcome;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jrobertgardzinski.observation.Observations;
@@ -350,7 +350,7 @@ public class PurgeCommandsConsumer {
             // absent one, because the orchestrator drops an unparseable one while a missing one
             // falls back to matching by e-mail. This service only says what it reserved.
             return Optional.of(mapper.writeValueAsString(
-                    new ClosureConfirmation(sagaId, parsed.userId(), reserved.references()).fields()));
+                    new ClosureConfirmation(sagaId, parsed.userId(), reserved.rows()).fields()));
         } catch (Exception impossible) {
             throw new IllegalStateException("could not build confirmation", impossible);
         }
