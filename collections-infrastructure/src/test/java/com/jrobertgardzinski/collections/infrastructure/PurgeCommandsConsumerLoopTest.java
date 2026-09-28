@@ -2,7 +2,7 @@ package com.jrobertgardzinski.collections.infrastructure;
 
 import static com.jrobertgardzinski.collections.application.TestUsers.u;
 import com.jrobertgardzinski.identity.UserId;
-import com.jrobertgardzinski.collections.application.InMemoryCollectionRepository;
+import com.jrobertgardzinski.collections.application.FakeCollectionRepository;
 import com.jrobertgardzinski.collections.closure.CollectionsClosureParticipant;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.spi.ILoggingEvent;
@@ -80,7 +80,7 @@ class PurgeCommandsConsumerLoopTest {
     // tests had to be read "before" and compared relative, and a forgotten reset made a
     // green test out of a wrong number
     private final ExportedObservations observations = new ExportedObservations();
-    private final InMemoryCollectionRepository store = new InMemoryCollectionRepository();
+    private final FakeCollectionRepository store = new FakeCollectionRepository();
 
     private final ListAppender<ILoggingEvent> logLines = new ListAppender<>();
 

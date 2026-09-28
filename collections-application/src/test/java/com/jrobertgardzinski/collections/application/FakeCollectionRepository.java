@@ -16,7 +16,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * A heap-only {@link CollectionRepository} for the tests that want no JDBC at all — this module's
+ * An in-memory {@link CollectionRepository} for the tests that want no JDBC at all — this module's
  * own unit tests, {@code collections-infrastructure}'s HTTP scenarios and (via this module's
  * test-jar) portal-specs. The running service never uses it. A {@link LinkedHashSet} per
  * (user, collection) gives set semantics (idempotent save) while remembering insertion order for a
@@ -27,7 +27,7 @@ import java.util.Set;
  * hiding: {@link #list} must not see a marked ref, and everything not in {@code marks} is ACTIVE.
  * {@link ItemErasureContractTest} holds this class and the JDBC adapter to the same promises.
  */
-public class InMemoryCollectionRepository implements CollectionRepository, ItemReferences, ItemErasure {
+public class FakeCollectionRepository implements CollectionRepository, ItemReferences, ItemErasure {
 
     private record Key(UserId user, String collection) {
     }

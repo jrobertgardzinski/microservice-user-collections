@@ -8,7 +8,7 @@ import com.jrobertgardzinski.collections.application.RemoveItem;
 import com.jrobertgardzinski.collections.application.RestoreUserItems;
 import com.jrobertgardzinski.collections.application.SaveItem;
 import com.jrobertgardzinski.collections.domain.ItemRef;
-import com.jrobertgardzinski.collections.application.InMemoryCollectionRepository;
+import com.jrobertgardzinski.collections.application.FakeCollectionRepository;
 import io.qameta.allure.Epic;
 import io.qameta.allure.Feature;
 import org.junit.jupiter.api.DynamicTest;
@@ -46,10 +46,10 @@ class IdempotentCommandsTest {
     private static final ItemRef COMMENT_7 = new ItemRef("comment", "7");
 
     /** Every command the service exposes, each exercised against a seeded store. */
-    private static final Map<String, Consumer<InMemoryCollectionRepository>> COMMANDS = commands();
+    private static final Map<String, Consumer<FakeCollectionRepository>> COMMANDS = commands();
 
-    private static Map<String, Consumer<InMemoryCollectionRepository>> commands() {
-        Map<String, Consumer<InMemoryCollectionRepository>> c = new LinkedHashMap<>();
+    private static Map<String, Consumer<FakeCollectionRepository>> commands() {
+        Map<String, Consumer<FakeCollectionRepository>> c = new LinkedHashMap<>();
         c.put("save into an empty collection",
                 store -> new SaveItem(store).execute(u("alice"), "favourites", MEME_42));
         c.put("save what is already there",
@@ -81,8 +81,8 @@ class IdempotentCommandsTest {
         return c;
     }
 
-    private static InMemoryCollectionRepository seeded() {
-        InMemoryCollectionRepository store = new InMemoryCollectionRepository();
+    private static FakeCollectionRepository seeded() {
+        FakeCollectionRepository store = new FakeCollectionRepository();
         store.add(u("alice"), "watchlist", COMMENT_7);
         store.add(u("bob"), "favourites", MEME_42);   // a bystander no command may disturb
         return store;
@@ -90,11 +90,11 @@ class IdempotentCommandsTest {
 
     /**
      * The observable state, flattened — what "the same state" means in the law. The RESERVATIONS
-     * are part of it, deliberately: a mark is invisible to {@link InMemoryCollectionRepository#list} by
+     * are part of it, deliberately: a mark is invisible to {@link FakeCollectionRepository#list} by
      * design, so a fingerprint built from listings alone would let every erasure command pass this
      * law without proving anything at all.
      */
-    private static Map<String, Object> fingerprint(InMemoryCollectionRepository store) {
+    private static Map<String, Object> fingerprint(FakeCollectionRepository store) {
         Map<String, Object> f = new LinkedHashMap<>();
         for (String user : new String[] {"alice", "bob"}) {
             for (String collection : new String[] {"favourites", "watchlist"}) {
@@ -109,10 +109,10 @@ class IdempotentCommandsTest {
     Stream<DynamicTest> every_command_twice_equals_once() {
         return COMMANDS.entrySet().stream().map(entry -> DynamicTest.dynamicTest(
                 entry.getKey(), () -> {
-                    InMemoryCollectionRepository once = seeded();
+                    FakeCollectionRepository once = seeded();
                     entry.getValue().accept(once);
 
-                    InMemoryCollectionRepository twice = seeded();
+                    FakeCollectionRepository twice = seeded();
                     entry.getValue().accept(twice);
                     entry.getValue().accept(twice);
 

@@ -1,6 +1,6 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
-import com.jrobertgardzinski.collections.application.InMemoryCollectionRepository;
+import com.jrobertgardzinski.collections.application.FakeCollectionRepository;
 import com.jrobertgardzinski.collections.application.ListItems;
 import com.jrobertgardzinski.collections.application.RemoveItem;
 import com.jrobertgardzinski.collections.application.SaveItem;
@@ -39,7 +39,7 @@ class CollectionsApiEdgeCasesTest {
 
     @BeforeAll
     static void startServer() {
-        InMemoryCollectionRepository store = new InMemoryCollectionRepository();
+        FakeCollectionRepository store = new FakeCollectionRepository();
         // only the one known token resolves — anything else is the gate saying "nobody"
         SecurityGate gate = token -> VALID_TOKEN.equals(token)
                 ? Optional.of(new Caller("alice@example.com", com.jrobertgardzinski.identity.UserId.random())) : Optional.empty();

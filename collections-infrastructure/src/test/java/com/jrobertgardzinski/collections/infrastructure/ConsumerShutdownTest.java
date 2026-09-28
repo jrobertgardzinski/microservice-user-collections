@@ -1,7 +1,7 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.jrobertgardzinski.collections.application.InMemoryCollectionRepository;
+import com.jrobertgardzinski.collections.application.FakeCollectionRepository;
 import com.jrobertgardzinski.collections.application.MarkUserItemsForErasure;
 import com.jrobertgardzinski.collections.application.PurgeDeletedItem;
 import com.jrobertgardzinski.collections.application.PurgeUserItems;
@@ -52,7 +52,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ConsumerShutdownTest {
 
     private final ObjectMapper mapper = new ObjectMapper();
-    private final InMemoryCollectionRepository store = new InMemoryCollectionRepository();
+    private final FakeCollectionRepository store = new FakeCollectionRepository();
 
     @Test
     void the_stop_hook_is_registered_and_ends_every_consumer_loop() {

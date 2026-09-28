@@ -26,12 +26,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Feature("Purge deleted item")
 class PurgeDeletedItemTest {
 
-    private InMemoryCollectionRepository store;
+    private FakeCollectionRepository store;
     private PurgeDeletedItem purge;
 
     @BeforeEach
     void freshStore() {
-        store = new InMemoryCollectionRepository();
+        store = new FakeCollectionRepository();
         purge = new PurgeDeletedItem(store);
     }
 

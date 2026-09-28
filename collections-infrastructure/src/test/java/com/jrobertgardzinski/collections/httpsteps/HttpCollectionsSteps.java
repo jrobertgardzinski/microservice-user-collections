@@ -6,7 +6,7 @@ import com.jrobertgardzinski.collections.application.ListItems;
 import com.jrobertgardzinski.collections.application.RemoveItem;
 import com.jrobertgardzinski.collections.application.SaveItem;
 import com.jrobertgardzinski.collections.infrastructure.CollectionsApi;
-import com.jrobertgardzinski.collections.application.InMemoryCollectionRepository;
+import com.jrobertgardzinski.collections.application.FakeCollectionRepository;
 import io.cucumber.java.After;
 import io.cucumber.java.Before;
 import io.cucumber.java.en.Given;
@@ -37,7 +37,7 @@ public class HttpCollectionsSteps {
 
     @Before
     public void startServer() {
-        InMemoryCollectionRepository store = new InMemoryCollectionRepository();
+        FakeCollectionRepository store = new FakeCollectionRepository();
         CollectionsApi api = new CollectionsApi(
                 new SaveItem(store), new RemoveItem(store), new ListItems(store), new FakeGate());
         server = WebServer.builder()

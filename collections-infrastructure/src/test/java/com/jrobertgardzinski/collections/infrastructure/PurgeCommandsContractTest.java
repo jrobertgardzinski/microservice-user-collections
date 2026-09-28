@@ -2,7 +2,7 @@ package com.jrobertgardzinski.collections.infrastructure;
 
 import static com.jrobertgardzinski.collections.application.TestUsers.u;
 import com.jrobertgardzinski.identity.UserId;
-import com.jrobertgardzinski.collections.application.InMemoryCollectionRepository;
+import com.jrobertgardzinski.collections.application.FakeCollectionRepository;
 import com.jrobertgardzinski.collections.domain.Observation;
 import au.com.dius.pact.consumer.MessagePactBuilder;
 import au.com.dius.pact.consumer.dsl.PactDslJsonBody;
@@ -55,7 +55,7 @@ class PurgeCommandsContractTest {
 
     private static final UserId LEAVER = u("leaver@example.com");
 
-    private final InMemoryCollectionRepository store = new InMemoryCollectionRepository();
+    private final FakeCollectionRepository store = new FakeCollectionRepository();
     private final PurgeCommandsConsumer consumer = new PurgeCommandsConsumer(
             new MarkUserItemsForErasure(store, Clock.systemUTC()), new RestoreUserItems(store),
             new PurgeUserItems(store), new ObjectMapper(), Observations.<Observation>silent());

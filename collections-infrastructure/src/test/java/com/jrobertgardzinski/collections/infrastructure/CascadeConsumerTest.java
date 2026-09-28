@@ -5,7 +5,7 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.jrobertgardzinski.collections.application.InMemoryCollectionRepository;
+import com.jrobertgardzinski.collections.application.FakeCollectionRepository;
 import com.jrobertgardzinski.collections.application.PurgeDeletedItem;
 import com.jrobertgardzinski.collections.domain.ItemRef;
 import io.qameta.allure.Epic;
@@ -47,7 +47,7 @@ class CascadeConsumerTest {
     private static final String COMMENT_3 = "33333333-3333-4333-8333-333333333333";
 
     private final ObjectMapper mapper = new ObjectMapper();
-    private final InMemoryCollectionRepository store = new InMemoryCollectionRepository();
+    private final FakeCollectionRepository store = new FakeCollectionRepository();
     private final CascadeConsumer cascade =
             new CascadeConsumer(new PurgeDeletedItem(store), mapper);
 

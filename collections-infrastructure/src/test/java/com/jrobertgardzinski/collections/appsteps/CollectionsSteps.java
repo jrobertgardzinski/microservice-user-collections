@@ -11,7 +11,7 @@ import com.jrobertgardzinski.collections.application.RestoreUserItems;
 import com.jrobertgardzinski.collections.application.RemoveItem;
 import com.jrobertgardzinski.collections.application.SaveItem;
 import com.jrobertgardzinski.collections.domain.ItemRef;
-import com.jrobertgardzinski.collections.application.InMemoryCollectionRepository;
+import com.jrobertgardzinski.collections.application.FakeCollectionRepository;
 import com.jrobertgardzinski.collections.infrastructure.PurgeCommandsConsumer;
 import io.cucumber.java.en.Given;
 import io.cucumber.java.en.Then;
@@ -26,7 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /** Drives the use cases over an in-memory store — the application-layer entry point. */
 public class CollectionsSteps {
 
-    private final InMemoryCollectionRepository store = new InMemoryCollectionRepository();
+    private final FakeCollectionRepository store = new FakeCollectionRepository();
     private final SaveItem saveItem = new SaveItem(store);
     private final RemoveItem removeItem = new RemoveItem(store);
     private final ListItems listItems = new ListItems(store);
