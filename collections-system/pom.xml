@@ -8,11 +8,11 @@
         <artifactId>microservice-user-collections</artifactId>
         <version>1.0.0-SNAPSHOT</version>
     </parent>
-    <artifactId>collections-application</artifactId>
+    <artifactId>collections-system</artifactId>
 
-    <!-- The use cases and the ports they speak through. Framework-free on purpose: nothing here
-         knows Helidon, JDBC or Kafka, which is what lets another process wire these same use
-         cases to different adapters. The whole list of what it is allowed to know is below. -->
+    <!-- The use cases that take saved references down: the pointer to content somebody else
+         deleted, or everything one leaver saved. Below the use cases that save, and reachable
+         without them. -->
     <dependencies>
         <dependency>
             <groupId>com.jrobertgardzinski</groupId>
@@ -26,6 +26,12 @@
             <groupId>com.jrobertgardzinski</groupId>
             <artifactId>user-id</artifactId>
         </dependency>
+        <dependency>
+            <!-- the port a service states its own facts through; the facts themselves stay ours -->
+            <groupId>com.jrobertgardzinski</groupId>
+            <artifactId>observation</artifactId>
+            <version>1.0.0-SNAPSHOT</version>
+        </dependency>
 
         <dependency>
             <groupId>org.junit.jupiter</groupId>
@@ -33,7 +39,7 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-            <!-- the ports' fakes, now beside the ports themselves -->
+            <!-- the ports' fakes, beside the ports -->
             <groupId>com.jrobertgardzinski</groupId>
             <artifactId>collections-domain</artifactId>
             <version>1.0.0-SNAPSHOT</version>
@@ -41,24 +47,4 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
-
-    <build>
-        <plugins>
-            <plugin>
-                <!-- the port CONTRACTS travel to whoever implements the ports: the JDBC adapter,
-                     the in-memory store next door, this service's own closure specs and the
-                     portal's one-process specs all subclass them. FOUR implementations is three
-                     more chances to drift, which is why this one is published. -->
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-jar-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <goals>
-                            <goal>test-jar</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-        </plugins>
-    </build>
 </project>

@@ -4,10 +4,10 @@ import com.jrobertgardzinski.collections.domain.Observation;
 import com.jrobertgardzinski.observation.Observations;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jrobertgardzinski.collections.application.ListItems;
-import com.jrobertgardzinski.collections.application.PurgeDeletedItem;
-import com.jrobertgardzinski.collections.application.MarkUserItemsForErasure;
-import com.jrobertgardzinski.collections.application.PurgeUserItems;
-import com.jrobertgardzinski.collections.application.RestoreUserItems;
+import com.jrobertgardzinski.collections.system.PurgeDeletedItem;
+import com.jrobertgardzinski.collections.system.MarkUserItemsForErasure;
+import com.jrobertgardzinski.collections.system.PurgeUserItems;
+import com.jrobertgardzinski.collections.system.RestoreUserItems;
 import com.jrobertgardzinski.collections.application.RemoveItem;
 import com.jrobertgardzinski.collections.application.SaveItem;
 import io.helidon.webserver.WebServer;
@@ -318,7 +318,7 @@ public final class Main {
             // is no saga, so there are no marks and nothing to watch (the same coupling the two
             // Spring participants get for free from @EnableScheduling)
             ErasureBacklogWatch backlogWatch = new ErasureBacklogWatch(
-                    new com.jrobertgardzinski.collections.application.WatchErasureBacklog(
+                    new com.jrobertgardzinski.collections.system.WatchErasureBacklog(
                             erasure, com.jrobertgardzinski.collections.config.ErasureTolerance.DEFAULT,
                             observations, Clock.systemUTC()));
             Thread.ofVirtual().name("erasure-backlog-watch").start(() -> {

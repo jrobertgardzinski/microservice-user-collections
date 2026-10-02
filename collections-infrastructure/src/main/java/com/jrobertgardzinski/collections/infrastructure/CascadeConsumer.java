@@ -2,7 +2,7 @@ package com.jrobertgardzinski.collections.infrastructure;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.jrobertgardzinski.collections.application.PurgeDeletedItem;
+import com.jrobertgardzinski.collections.system.PurgeDeletedItem;
 import com.jrobertgardzinski.collections.deletion.CollectionsDeletionParticipant;
 import com.jrobertgardzinski.deletion.CommentsDeleted;
 import com.jrobertgardzinski.deletion.DeletionMessages;

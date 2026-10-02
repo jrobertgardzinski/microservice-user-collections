@@ -2,10 +2,10 @@ package com.jrobertgardzinski.collections.infrastructure;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jrobertgardzinski.collections.domain.FakeCollectionRepository;
-import com.jrobertgardzinski.collections.application.MarkUserItemsForErasure;
-import com.jrobertgardzinski.collections.application.PurgeDeletedItem;
-import com.jrobertgardzinski.collections.application.PurgeUserItems;
-import com.jrobertgardzinski.collections.application.RestoreUserItems;
+import com.jrobertgardzinski.collections.system.MarkUserItemsForErasure;
+import com.jrobertgardzinski.collections.system.PurgeDeletedItem;
+import com.jrobertgardzinski.collections.system.PurgeUserItems;
+import com.jrobertgardzinski.collections.system.RestoreUserItems;
 import com.jrobertgardzinski.collections.domain.Observation;
 import com.jrobertgardzinski.observation.Observations;
 import io.qameta.allure.Epic;

@@ -4,7 +4,7 @@ import static com.jrobertgardzinski.collections.application.TestUsers.u;
 import com.jrobertgardzinski.identity.UserId;
 import com.jrobertgardzinski.collections.domain.ItemErasure;
 import com.jrobertgardzinski.observation.Observations;
-import com.jrobertgardzinski.collections.application.WatchErasureBacklog;
+import com.jrobertgardzinski.collections.system.WatchErasureBacklog;
 import com.jrobertgardzinski.collections.config.ErasureTolerance;
 import com.jrobertgardzinski.collections.domain.ItemRef;
 import com.jrobertgardzinski.collections.domain.ItemStatus;

@@ -13,7 +13,7 @@ import au.com.dius.pact.core.model.messaging.Message;
 import au.com.dius.pact.core.model.messaging.MessagePact;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jrobertgardzinski.collections.domain.FakeCollectionRepository;
-import com.jrobertgardzinski.collections.application.PurgeDeletedItem;
+import com.jrobertgardzinski.collections.system.PurgeDeletedItem;
 import com.jrobertgardzinski.collections.domain.ItemRef;
 import io.qameta.allure.Epic;
 import io.qameta.allure.Feature;

@@ -2,9 +2,9 @@ package com.jrobertgardzinski.collections;
 
 import static com.jrobertgardzinski.collections.application.TestUsers.u;
 import com.jrobertgardzinski.collections.domain.ItemRef;
-import com.jrobertgardzinski.collections.application.MarkUserItemsForErasure;
-import com.jrobertgardzinski.collections.application.PurgeUserItems;
-import com.jrobertgardzinski.collections.application.RestoreUserItems;
+import com.jrobertgardzinski.collections.system.MarkUserItemsForErasure;
+import com.jrobertgardzinski.collections.system.PurgeUserItems;
+import com.jrobertgardzinski.collections.system.RestoreUserItems;
 import com.jrobertgardzinski.collections.infrastructure.JdbcCollectionRepository;
 import com.jrobertgardzinski.collections.infrastructure.JdbcItemErasure;
 import com.zaxxer.hikari.HikariConfig;

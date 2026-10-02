@@ -56,6 +56,7 @@
     <modules>
         <module>collections-domain</module>
         <module>collections-config</module>
+        <module>collections-system</module>
         <module>collections-application</module>
         <module>collections_account-closure</module>
         <module>collections_meme-deletion</module>

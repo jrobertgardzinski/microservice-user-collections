@@ -1,5 +1,6 @@
 package com.jrobertgardzinski.collections.application;
 
+import com.jrobertgardzinski.collections.system.PurgeDeletedItem;
 import com.jrobertgardzinski.collections.domain.FakeCollectionRepository;
 import static com.jrobertgardzinski.collections.application.TestUsers.u;
 import com.jrobertgardzinski.collections.domain.ItemRef;

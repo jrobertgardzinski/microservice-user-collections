@@ -1,4 +1,4 @@
-package com.jrobertgardzinski.collections.application;
+package com.jrobertgardzinski.collections.system;
 
 import com.jrobertgardzinski.collections.domain.ItemErasure;
 import com.jrobertgardzinski.identity.UserId;

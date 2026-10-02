@@ -2,8 +2,8 @@ package com.jrobertgardzinski.collections.infrastructure;
 
 import static com.jrobertgardzinski.collections.application.TestUsers.u;
 import com.jrobertgardzinski.identity.UserId;
-import com.jrobertgardzinski.collections.application.PurgeDeletedItem;
-import com.jrobertgardzinski.collections.application.PurgeUserItems;
+import com.jrobertgardzinski.collections.system.PurgeDeletedItem;
+import com.jrobertgardzinski.collections.system.PurgeUserItems;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import io.qameta.allure.Epic;

@@ -8,7 +8,7 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import com.jrobertgardzinski.collections.domain.ItemErasure;
-import com.jrobertgardzinski.collections.application.MarkUserItemsForErasure;
+import com.jrobertgardzinski.collections.system.MarkUserItemsForErasure;
 import com.jrobertgardzinski.collections.domain.ItemRef;
 import com.jrobertgardzinski.collections.domain.SavedItem;
 import io.qameta.allure.Epic;
@@ -72,7 +72,7 @@ class ErasureBacklogWatchTest {
     private static ErasureBacklogWatch watching(
             com.jrobertgardzinski.collections.domain.ItemErasure erasure, Instant now) {
         return new ErasureBacklogWatch(
-                new com.jrobertgardzinski.collections.application.WatchErasureBacklog(
+                new com.jrobertgardzinski.collections.system.WatchErasureBacklog(
                         erasure,
                         new com.jrobertgardzinski.collections.config.ErasureTolerance(
                                 Duration.ofMinutes(30)),
