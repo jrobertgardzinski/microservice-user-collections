@@ -40,8 +40,8 @@ import static org.junit.jupiter.api.Assertions.fail;
  *
  * <p><strong>Why this test does not chase a deadlock the way that one does.</strong> Checked in
  * {@code Main.java}: neither {@link PurgeUserItems} nor {@link PurgeDeletedItem} is wrapped in a
- * transaction spanning more than one statement — {@link com.jrobertgardzinski.collections.application.ItemErasure#eraseMarked}
- * and {@link com.jrobertgardzinski.collections.application.ItemReferences#purge} are each ONE
+ * transaction spanning more than one statement — {@link com.jrobertgardzinski.collections.domain.ItemErasure#eraseMarked}
+ * and {@link com.jrobertgardzinski.collections.domain.ItemReferences#purge} are each ONE
  * {@code DELETE}, auto-committed on its own. A single statement cannot be paused between "locked
  * row A" and "about to lock row B" from outside — there is no seam a test can hook, unlike
  * {@code PurgeUserComments}, which visibly runs {@code purgeVoter} then {@code purgeComment} as two

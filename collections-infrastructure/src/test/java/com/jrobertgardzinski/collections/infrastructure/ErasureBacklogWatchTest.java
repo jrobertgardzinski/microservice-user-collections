@@ -2,12 +2,12 @@ package com.jrobertgardzinski.collections.infrastructure;
 
 import static com.jrobertgardzinski.collections.application.TestUsers.u;
 import com.jrobertgardzinski.identity.UserId;
-import com.jrobertgardzinski.collections.application.FakeCollectionRepository;
+import com.jrobertgardzinski.collections.domain.FakeCollectionRepository;
 import com.jrobertgardzinski.collections.domain.Observation;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
-import com.jrobertgardzinski.collections.application.ItemErasure;
+import com.jrobertgardzinski.collections.domain.ItemErasure;
 import com.jrobertgardzinski.collections.application.MarkUserItemsForErasure;
 import com.jrobertgardzinski.collections.domain.ItemRef;
 import com.jrobertgardzinski.collections.domain.SavedItem;
@@ -70,7 +70,7 @@ class ErasureBacklogWatchTest {
 
     /** The real chain: the use case decides, this class only runs it and reports what it decided. */
     private static ErasureBacklogWatch watching(
-            com.jrobertgardzinski.collections.application.ItemErasure erasure, Instant now) {
+            com.jrobertgardzinski.collections.domain.ItemErasure erasure, Instant now) {
         return new ErasureBacklogWatch(
                 new com.jrobertgardzinski.collections.application.WatchErasureBacklog(
                         erasure,

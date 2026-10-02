@@ -38,6 +38,14 @@
             <artifactId>junit-jupiter</artifactId>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <!-- the ports' fakes, now beside the ports themselves -->
+            <groupId>com.jrobertgardzinski</groupId>
+            <artifactId>collections-domain</artifactId>
+            <version>1.0.0-SNAPSHOT</version>
+            <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>

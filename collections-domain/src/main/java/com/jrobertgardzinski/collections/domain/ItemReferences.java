@@ -1,4 +1,4 @@
-package com.jrobertgardzinski.collections.application;
+package com.jrobertgardzinski.collections.domain;
 
 import java.util.List;
 

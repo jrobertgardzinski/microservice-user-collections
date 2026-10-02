@@ -1,5 +1,6 @@
 package com.jrobertgardzinski.collections.application;
 
+import com.jrobertgardzinski.collections.domain.ItemErasure;
 import com.jrobertgardzinski.identity.UserId;
 import com.jrobertgardzinski.collections.domain.SavedItem;
 

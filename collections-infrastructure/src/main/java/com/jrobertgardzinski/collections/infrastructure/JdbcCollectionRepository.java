@@ -1,8 +1,8 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
-import com.jrobertgardzinski.collections.application.CollectionRepository;
-import com.jrobertgardzinski.collections.application.ItemReferences;
+import com.jrobertgardzinski.collections.domain.CollectionRepository;
 import com.jrobertgardzinski.collections.domain.ItemRef;
+import com.jrobertgardzinski.collections.domain.ItemReferences;
 import com.jrobertgardzinski.collections.domain.ItemStatus;
 import com.jrobertgardzinski.identity.UserId;
 

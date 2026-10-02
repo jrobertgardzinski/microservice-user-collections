@@ -2,7 +2,7 @@ package com.jrobertgardzinski.collections.infrastructure;
 
 import static com.jrobertgardzinski.collections.application.TestUsers.u;
 import com.jrobertgardzinski.identity.UserId;
-import com.jrobertgardzinski.collections.application.ItemErasure;
+import com.jrobertgardzinski.collections.domain.ItemErasure;
 import com.jrobertgardzinski.observation.Observations;
 import com.jrobertgardzinski.collections.application.WatchErasureBacklog;
 import com.jrobertgardzinski.collections.config.ErasureTolerance;

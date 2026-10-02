@@ -1,6 +1,5 @@
-package com.jrobertgardzinski.collections.application;
+package com.jrobertgardzinski.collections.domain;
 
-import com.jrobertgardzinski.collections.domain.SavedItem;
 import com.jrobertgardzinski.identity.UserId;
 
 import java.time.Instant;

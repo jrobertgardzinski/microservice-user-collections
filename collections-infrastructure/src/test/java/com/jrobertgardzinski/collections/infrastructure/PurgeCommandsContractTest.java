@@ -2,7 +2,7 @@ package com.jrobertgardzinski.collections.infrastructure;
 
 import static com.jrobertgardzinski.collections.application.TestUsers.u;
 import com.jrobertgardzinski.identity.UserId;
-import com.jrobertgardzinski.collections.application.FakeCollectionRepository;
+import com.jrobertgardzinski.collections.domain.FakeCollectionRepository;
 import com.jrobertgardzinski.collections.domain.Observation;
 import au.com.dius.pact.consumer.MessagePactBuilder;
 import au.com.dius.pact.consumer.dsl.PactDslJsonBody;

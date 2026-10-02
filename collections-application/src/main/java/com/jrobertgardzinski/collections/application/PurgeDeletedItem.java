@@ -1,5 +1,6 @@
 package com.jrobertgardzinski.collections.application;
 
+import com.jrobertgardzinski.collections.domain.ItemReferences;
 import java.util.List;
 
 /**

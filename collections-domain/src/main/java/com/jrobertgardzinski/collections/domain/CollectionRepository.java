@@ -1,6 +1,5 @@
-package com.jrobertgardzinski.collections.application;
+package com.jrobertgardzinski.collections.domain;
 
-import com.jrobertgardzinski.collections.domain.ItemRef;
 import com.jrobertgardzinski.identity.UserId;
 
 import java.util.List;

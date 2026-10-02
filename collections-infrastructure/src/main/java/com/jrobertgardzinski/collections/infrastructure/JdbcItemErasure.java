@@ -1,6 +1,6 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
-import com.jrobertgardzinski.collections.application.ItemErasure;
+import com.jrobertgardzinski.collections.domain.ItemErasure;
 import com.jrobertgardzinski.collections.domain.ItemRef;
 import com.jrobertgardzinski.collections.domain.ItemStatus;
 import com.jrobertgardzinski.collections.domain.SavedItem;

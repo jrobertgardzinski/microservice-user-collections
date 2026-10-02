@@ -1,5 +1,6 @@
 package com.jrobertgardzinski.collections.application;
 
+import com.jrobertgardzinski.collections.domain.ItemErasure;
 import com.jrobertgardzinski.observation.Observations;
 import com.jrobertgardzinski.collections.config.ErasureTolerance;
 import com.jrobertgardzinski.collections.domain.Observation;
