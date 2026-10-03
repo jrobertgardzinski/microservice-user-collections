@@ -26,10 +26,6 @@
     <dependencies>
         <dependency>
             <groupId>com.jrobertgardzinski</groupId>
-            <artifactId>collections-application</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.jrobertgardzinski</groupId>
             <artifactId>collections-domain</artifactId>
         </dependency>
         <dependency>

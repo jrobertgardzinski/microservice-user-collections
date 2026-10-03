@@ -55,7 +55,8 @@ class ObservabilityIsOptionalTest {
     private static final List<Path> ABOVE_INFRASTRUCTURE = List.of(
             Path.of("../collections-domain/src/main/java/com/jrobertgardzinski/collections/domain"),
             Path.of("../collections-config/src/main/java/com/jrobertgardzinski/collections/config"),
-            Path.of("../collections-application/src/main/java/com/jrobertgardzinski/collections/application"));
+            Path.of("../collections-application/src/main/java/com/jrobertgardzinski/collections/application"),
+            Path.of("../collections-system/src/main/java/com/jrobertgardzinski/collections/system"));
 
     /**
      * Vendor words, not concepts. {@code observ} is deliberately absent: {@code Observation} and

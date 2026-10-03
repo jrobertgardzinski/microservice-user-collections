@@ -4,15 +4,19 @@ A user's saved references — memes, comments — kept in named collections ("fa
 "watchlist"). The references are **opaque**: an `(itemType, itemId)` pair the service stores and
 returns but never interprets, which is what keeps it out of every other service's business.
 Helidon SE (imperative, blocking, scaling on Loom — a deliberately different flavour from the
-Boot/Micronaut/Quarkus siblings), the estate's four layers as four Maven modules
-(`collections-domain` / `collections-config` / `collections-application` /
+Boot/Micronaut/Quarkus siblings), the estate's layers as Maven modules
+(`collections-domain` / `collections-config` / `collections-application` / `collections-system` /
 `collections-infrastructure`), Postgres + Flyway (H2 in PostgreSQL mode for dev and tests).
+`collections-application` holds the use cases that save, remove and list; `collections-system`
+holds the ones that take saved references down — the cascade's purge and the leaver's rows — and
+is reachable without the ones that save.
 
-Beside them sits `collections_account-closure`: not a layer, but this service's part in ONE
-cross-service process — what happens to a person's saved references when their account closes.
+Beside them sit `collections_account-closure` and `collections_meme-deletion`: not layers, but
+this service's parts in TWO cross-service processes — what happens to a person's saved references
+when their account closes, and what happens to a reference when the thing it points at is deleted.
 The underscore says so. `collections-<x>` is a layer; `collections_<x>` is a participation, named
 after the library the participants speak through, and `memes_account-closure` and
-`comments_account-closure` are the other ends of the same conversation.
+`comments_account-closure` are the other ends of the first of those conversations.
 
 The layers are modules rather than packages because a package boundary is a convention and a
 module boundary is a classpath: `collections-application` compiles without Helidon, JDBC or Kafka

@@ -21,22 +21,10 @@
     -->
     <dependencies>
         <dependency>
-            <groupId>com.jrobertgardzinski</groupId>
-            <artifactId>collections-application</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.jrobertgardzinski</groupId>
-            <artifactId>collections-domain</artifactId>
-        </dependency>
-        <dependency>
             <!-- the words the three services share when a meme is deleted -->
             <groupId>com.jrobertgardzinski</groupId>
             <artifactId>meme-deletion</artifactId>
             <version>1.0.0-SNAPSHOT</version>
-        </dependency>
-        <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-api</artifactId>
         </dependency>
         <dependency>
             <!-- the use cases that take content down -->

@@ -20,10 +20,6 @@
         </dependency>
         <dependency>
             <groupId>com.jrobertgardzinski</groupId>
-            <artifactId>collections-config</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.jrobertgardzinski</groupId>
             <artifactId>user-id</artifactId>
         </dependency>
 

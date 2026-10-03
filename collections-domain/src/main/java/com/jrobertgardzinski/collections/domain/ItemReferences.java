@@ -24,8 +24,8 @@ public interface ItemReferences {
      * how many rows went. Idempotent by nature — a second call simply matches nothing and returns
      * 0 — which is what lets the cascade absorb at-least-once delivery without dedup.
      *
-     * <p>The caller has already dropped blanks and duplicates (see {@link PurgeDeletedItem}); an
-     * empty list is a no-op.
+     * <p>The caller has already dropped blanks and duplicates (the cascade use case that drives
+     * this port, {@code PurgeDeletedItem}, does it); an empty list is a no-op.
      */
     int purge(String itemType, List<String> itemIds);
 }
