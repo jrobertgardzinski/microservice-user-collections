@@ -5,8 +5,9 @@ A user's saved references — memes, comments — kept in named collections ("fa
 returns but never interprets, which is what keeps it out of every other service's business.
 Helidon SE (imperative, blocking, scaling on Loom — a deliberately different flavour from the
 Boot/Micronaut/Quarkus siblings), the estate's layers as Maven modules
-(`collections-domain` / `collections-config` / `collections-application` / `collections-system` /
-`collections-infrastructure`), Postgres + Flyway (H2 in PostgreSQL mode for dev and tests).
+(`collections-domain-*` / `collections-config-*` / `collections-application` / `collections-system-*` /
+`collections-infrastructure`; domain, config and system cut by area — core and erasure — one module
+per area and layer), Postgres + Flyway (H2 in PostgreSQL mode for dev and tests).
 `collections-application` holds the use cases that save, remove and list; `collections-system`
 holds the ones that take saved references down — the cascade's purge and the leaver's rows — and
 is reachable without the ones that save.
