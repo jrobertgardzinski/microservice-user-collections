@@ -27,6 +27,7 @@ import java.util.Locale;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
  * The boundary, asserted instead of promised: observability is a layer this service can be
@@ -52,11 +53,24 @@ class ObservabilityIsOptionalTest {
      * this one. {@link Files#walk} throws on a missing directory, so a path that rots here fails
      * the test instead of quietly walking nothing and passing.
      */
-    private static final List<Path> ABOVE_INFRASTRUCTURE = List.of(
-            Path.of("../collections-domain/src/main/java/com/jrobertgardzinski/collections/domain"),
-            Path.of("../collections-config/src/main/java/com/jrobertgardzinski/collections/config"),
-            Path.of("../collections-application/src/main/java/com/jrobertgardzinski/collections/application"),
-            Path.of("../collections-system/src/main/java/com/jrobertgardzinski/collections/system"));
+    private static List<Path> aboveInfrastructure() throws IOException {
+        // domain, config and system are cut by area, one module each: found by name, so a new
+        // area is checked too — and a layer that finds no module at all fails, like a rotten path
+        List<Path> layers = new java.util.ArrayList<>();
+        for (String layer : List.of("domain", "config", "system")) {
+            try (Stream<Path> modules = Files.list(Path.of(".."))) {
+                List<Path> areas = modules
+                        .filter(module -> module.getFileName().toString().startsWith("collections-" + layer + "-"))
+                        .map(module -> module.resolve("src/main/java/com/jrobertgardzinski/collections/" + layer))
+                        .sorted()
+                        .toList();
+                assertFalse(areas.isEmpty(), "no collections-" + layer + "-* module found");
+                layers.addAll(areas);
+            }
+        }
+        layers.add(Path.of("../collections-application/src/main/java/com/jrobertgardzinski/collections/application"));
+        return layers;
+    }
 
     /**
      * Vendor words, not concepts. {@code observ} is deliberately absent: {@code Observation} and
@@ -69,7 +83,7 @@ class ObservabilityIsOptionalTest {
     @Test
     @DisplayName("no layer above infrastructure names the tool that watches it")
     void the_tool_stays_in_the_adapter() throws IOException {
-        for (Path layer : ABOVE_INFRASTRUCTURE) {
+        for (Path layer : aboveInfrastructure()) {
             try (Stream<Path> tree = Files.walk(layer)) {
                 List<String> leaks = tree
                         .filter(file -> file.toString().endsWith(".java"))
