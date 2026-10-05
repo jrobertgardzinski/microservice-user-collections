@@ -5,7 +5,7 @@ A user's saved references — memes, comments — kept in named collections ("fa
 returns but never interprets, which is what keeps it out of every other service's business.
 Helidon SE (imperative, blocking, scaling on Loom — a deliberately different flavour from the
 Boot/Micronaut/Quarkus siblings), the estate's layers as Maven modules
-(`collections-domain-*` / `collections-config-*` / `collections-application` / `collections-system-*` /
+(`collections-domain_*` / `collections-config_*` / `collections-application` / `collections-system_*` /
 `collections-infrastructure`; domain, config and system cut by area — core and erasure — one module
 per area and layer), Postgres + Flyway (H2 in PostgreSQL mode for dev and tests).
 `collections-application` holds the use cases that save, remove and list; `collections-system`
@@ -15,7 +15,8 @@ is reachable without the ones that save.
 Beside them sit `collections_account-closure` and `collections_meme-deletion`: not layers, but
 this service's parts in TWO cross-service processes — what happens to a person's saved references
 when their account closes, and what happens to a reference when the thing it points at is deleted.
-The underscore says so. `collections-<x>` is a layer; `collections_<x>` is a participation, named
+The underscore straight after the service's name says so. `collections-<x>` is a layer (and
+`collections-<layer>_<area>` one area of it); `collections_<x>` is a participation, named
 after the library the participants speak through, and `memes_account-closure` and
 `comments_account-closure` are the other ends of the first of those conversations.
 

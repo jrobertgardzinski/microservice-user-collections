@@ -60,11 +60,11 @@ class ObservabilityIsOptionalTest {
         for (String layer : List.of("domain", "config", "system")) {
             try (Stream<Path> modules = Files.list(Path.of(".."))) {
                 List<Path> areas = modules
-                        .filter(module -> module.getFileName().toString().startsWith("collections-" + layer + "-"))
+                        .filter(module -> module.getFileName().toString().startsWith("collections-" + layer + "_"))
                         .map(module -> module.resolve("src/main/java/com/jrobertgardzinski/collections/" + layer))
                         .sorted()
                         .toList();
-                assertFalse(areas.isEmpty(), "no collections-" + layer + "-* module found");
+                assertFalse(areas.isEmpty(), "no collections-" + layer + "_* module found");
                 layers.addAll(areas);
             }
         }

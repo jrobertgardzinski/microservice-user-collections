@@ -54,11 +54,11 @@
     </properties>
 
     <modules>
-        <module>collections-domain-core</module>
-        <module>collections-domain-erasure</module>
-        <module>collections-config-erasure</module>
-        <module>collections-system-core</module>
-        <module>collections-system-erasure</module>
+        <module>collections-domain_core</module>
+        <module>collections-domain_erasure</module>
+        <module>collections-config_erasure</module>
+        <module>collections-system_core</module>
+        <module>collections-system_erasure</module>
         <module>collections-application</module>
         <module>collections_account-closure</module>
         <module>collections_meme-deletion</module>
@@ -96,17 +96,17 @@
             <!-- this service's own layers: one version, the reactor's -->
             <dependency>
                 <groupId>com.jrobertgardzinski</groupId>
-                <artifactId>collections-domain-core</artifactId>
+                <artifactId>collections-domain_core</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.jrobertgardzinski</groupId>
-                <artifactId>collections-domain-erasure</artifactId>
+                <artifactId>collections-domain_erasure</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.jrobertgardzinski</groupId>
-                <artifactId>collections-config-erasure</artifactId>
+                <artifactId>collections-config_erasure</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

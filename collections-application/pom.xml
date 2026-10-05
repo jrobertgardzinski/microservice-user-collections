@@ -16,7 +16,7 @@
     <dependencies>
         <dependency>
             <groupId>com.jrobertgardzinski</groupId>
-            <artifactId>collections-domain-core</artifactId>
+            <artifactId>collections-domain_core</artifactId>
         </dependency>
         <dependency>
             <groupId>com.jrobertgardzinski</groupId>

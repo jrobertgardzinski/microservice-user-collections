@@ -8,14 +8,14 @@
         <artifactId>microservice-user-collections</artifactId>
         <version>1.0.0-SNAPSHOT</version>
     </parent>
-    <artifactId>collections-domain-erasure</artifactId>
+    <artifactId>collections-domain_erasure</artifactId>
 
     <!-- Pure domain: the saved reference, its status, and the facts this service states.
          No framework, no I/O — nothing here but the JDK. -->
     <dependencies>
         <dependency>
             <groupId>com.jrobertgardzinski</groupId>
-            <artifactId>collections-domain-core</artifactId>
+            <artifactId>collections-domain_core</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>

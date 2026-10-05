@@ -26,7 +26,7 @@
     <dependencies>
         <dependency>
             <groupId>com.jrobertgardzinski</groupId>
-            <artifactId>collections-domain-erasure</artifactId>
+            <artifactId>collections-domain_erasure</artifactId>
         </dependency>
         <dependency>
             <!-- the words the participants and the orchestrator share, including the parsed
@@ -47,7 +47,7 @@
         <dependency>
             <!-- the use cases that take content down -->
             <groupId>com.jrobertgardzinski</groupId>
-            <artifactId>collections-system-erasure</artifactId>
+            <artifactId>collections-system_erasure</artifactId>
             <version>1.0.0-SNAPSHOT</version>
         </dependency>
     </dependencies>

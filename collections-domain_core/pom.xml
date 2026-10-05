@@ -8,7 +8,7 @@
         <artifactId>microservice-user-collections</artifactId>
         <version>1.0.0-SNAPSHOT</version>
     </parent>
-    <artifactId>collections-domain-core</artifactId>
+    <artifactId>collections-domain_core</artifactId>
 
     <!-- Pure domain: the saved reference, its status, and the facts this service states.
          No framework, no I/O — nothing here but the JDK. -->

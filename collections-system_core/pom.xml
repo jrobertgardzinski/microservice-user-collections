@@ -8,11 +8,17 @@
         <artifactId>microservice-user-collections</artifactId>
         <version>1.0.0-SNAPSHOT</version>
     </parent>
-    <artifactId>collections-config-erasure</artifactId>
+    <artifactId>collections-system_core</artifactId>
 
-    <!-- The typed, validated dials — how long a marked item waits before it is really gone.
-         Pure JDK: a dial that needed a framework to be read would not be a dial. -->
+    <!-- The use cases that take saved references down: the pointer to content somebody else
+         deleted, or everything one leaver saved. Below the use cases that save, and reachable
+         without them. -->
     <dependencies>
+        <dependency>
+            <groupId>com.jrobertgardzinski</groupId>
+            <artifactId>collections-domain_core</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
