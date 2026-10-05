@@ -1,17 +1,17 @@
 package com.jrobertgardzinski.collections.appsteps;
 
 import static com.jrobertgardzinski.collections.application.TestUsers.u;
-import com.jrobertgardzinski.collections.domain.Observation;
+import com.jrobertgardzinski.collections.domain.erasure.Observation;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jrobertgardzinski.observation.Observations;
-import com.jrobertgardzinski.collections.application.ListItems;
-import com.jrobertgardzinski.collections.system.MarkUserItemsForErasure;
-import com.jrobertgardzinski.collections.system.PurgeUserItems;
-import com.jrobertgardzinski.collections.system.RestoreUserItems;
-import com.jrobertgardzinski.collections.application.RemoveItem;
-import com.jrobertgardzinski.collections.application.SaveItem;
-import com.jrobertgardzinski.collections.domain.FakeCollectionRepository;
-import com.jrobertgardzinski.collections.domain.ItemRef;
+import com.jrobertgardzinski.collections.system.core.ListItems;
+import com.jrobertgardzinski.collections.system.erasure.MarkUserItemsForErasure;
+import com.jrobertgardzinski.collections.system.erasure.PurgeUserItems;
+import com.jrobertgardzinski.collections.system.erasure.RestoreUserItems;
+import com.jrobertgardzinski.collections.system.core.RemoveItem;
+import com.jrobertgardzinski.collections.system.core.SaveItem;
+import com.jrobertgardzinski.collections.domain.erasure.FakeCollectionRepository;
+import com.jrobertgardzinski.collections.domain.core.ItemRef;
 import com.jrobertgardzinski.collections.infrastructure.PurgeCommandsConsumer;
 import io.cucumber.java.en.Given;
 import io.cucumber.java.en.Then;

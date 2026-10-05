@@ -7,9 +7,12 @@ Helidon SE (imperative, blocking, scaling on Loom — a deliberately different f
 Boot/Micronaut/Quarkus siblings), the estate's layers as Maven modules
 (`collections-domain` / `collections-config` / `collections-application` / `collections-system` /
 `collections-infrastructure`), Postgres + Flyway (H2 in PostgreSQL mode for dev and tests).
-`collections-application` holds the use cases that save, remove and list; `collections-system`
-holds the ones that take saved references down — the cascade's purge and the leaver's rows — and
-is reachable without the ones that save.
+`collections-system` holds every use case, on the domain — saving, removing and listing, and taking
+saved references down (the cascade's purge and the leaver's rows); `collections-application` is
+the bridge the HTTP API calls, `CollectionService`, which turns the names a caller sent into the
+domain and refuses one no column could hold. Since 2026-10-05 the layers mean what they mean in
+`microservice-security`. Inside every layer the classes sit in one package per area — core,
+erasure — and `AreaBoundariesTest` holds the graph of which area may import which.
 
 Beside them sit `collections_account-closure` and `collections_meme-deletion`: not layers, but
 this service's parts in TWO cross-service processes — what happens to a person's saved references

@@ -2,9 +2,9 @@ package com.jrobertgardzinski.collections.infrastructure;
 
 import static com.jrobertgardzinski.collections.application.TestUsers.u;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.jrobertgardzinski.collections.domain.FakeCollectionRepository;
-import com.jrobertgardzinski.collections.system.PurgeDeletedItem;
-import com.jrobertgardzinski.collections.domain.ItemRef;
+import com.jrobertgardzinski.collections.domain.erasure.FakeCollectionRepository;
+import com.jrobertgardzinski.collections.system.core.PurgeDeletedItem;
+import com.jrobertgardzinski.collections.domain.core.ItemRef;
 import io.qameta.allure.Epic;
 import io.qameta.allure.Feature;
 import io.qameta.allure.Story;

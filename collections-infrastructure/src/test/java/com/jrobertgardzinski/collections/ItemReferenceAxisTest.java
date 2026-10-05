@@ -1,7 +1,7 @@
 package com.jrobertgardzinski.collections;
 
 import static com.jrobertgardzinski.collections.application.TestUsers.u;
-import com.jrobertgardzinski.collections.domain.ItemRef;
+import com.jrobertgardzinski.collections.domain.core.ItemRef;
 import com.jrobertgardzinski.collections.infrastructure.JdbcCollectionRepository;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;

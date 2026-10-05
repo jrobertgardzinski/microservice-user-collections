@@ -16,6 +16,11 @@
     <dependencies>
         <dependency>
             <groupId>com.jrobertgardzinski</groupId>
+            <artifactId>collections-system</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.jrobertgardzinski</groupId>
             <artifactId>collections-domain</artifactId>
         </dependency>
         <dependency>

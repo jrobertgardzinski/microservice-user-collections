@@ -1,12 +1,13 @@
 package com.jrobertgardzinski.collections.httpsteps;
 
+import com.jrobertgardzinski.collections.application.core.CollectionService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.jrobertgardzinski.collections.application.ListItems;
-import com.jrobertgardzinski.collections.application.RemoveItem;
-import com.jrobertgardzinski.collections.application.SaveItem;
+import com.jrobertgardzinski.collections.system.core.ListItems;
+import com.jrobertgardzinski.collections.system.core.RemoveItem;
+import com.jrobertgardzinski.collections.system.core.SaveItem;
 import com.jrobertgardzinski.collections.infrastructure.CollectionsApi;
-import com.jrobertgardzinski.collections.domain.FakeCollectionRepository;
+import com.jrobertgardzinski.collections.domain.erasure.FakeCollectionRepository;
 import io.cucumber.java.After;
 import io.cucumber.java.Before;
 import io.cucumber.java.en.Given;
@@ -39,7 +40,7 @@ public class HttpCollectionsSteps {
     public void startServer() {
         FakeCollectionRepository store = new FakeCollectionRepository();
         CollectionsApi api = new CollectionsApi(
-                new SaveItem(store), new RemoveItem(store), new ListItems(store), new FakeGate());
+                new CollectionService(new SaveItem(store), new RemoveItem(store), new ListItems(store)), new FakeGate());
         server = WebServer.builder()
                 .port(0)   // a free port
                 .routing(routing -> routing.register("/collections", api))

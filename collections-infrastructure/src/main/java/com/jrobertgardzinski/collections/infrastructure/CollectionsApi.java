@@ -1,12 +1,10 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
+import com.jrobertgardzinski.collections.application.core.CollectionService;
 import com.jrobertgardzinski.identity.UserId;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.jrobertgardzinski.collections.application.ListItems;
-import com.jrobertgardzinski.collections.application.RemoveItem;
-import com.jrobertgardzinski.collections.application.SaveItem;
-import com.jrobertgardzinski.collections.domain.ItemRef;
+import com.jrobertgardzinski.collections.domain.core.ItemRef;
 import io.helidon.http.HeaderNames;
 import io.helidon.http.Status;
 import io.helidon.webserver.http.HttpRules;
@@ -14,6 +12,7 @@ import io.helidon.webserver.http.HttpService;
 import io.helidon.webserver.http.ServerRequest;
 import io.helidon.webserver.http.ServerResponse;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -36,22 +35,12 @@ import java.util.Optional;
  */
 public class CollectionsApi implements HttpService {
 
-    // the schema's column widths (V1__schema.sql): anything longer would only surface
-    // as a SQLException deep in the JDBC store (a 500), so the boundary answers 400 up front
-    private static final int MAX_COLLECTION_LENGTH = 64;
-    private static final int MAX_ITEM_TYPE_LENGTH = 64;
-    private static final int MAX_ITEM_ID_LENGTH = 128;
-
-    private final SaveItem saveItem;
-    private final RemoveItem removeItem;
-    private final ListItems listItems;
+    private final CollectionService collections;
     private final SecurityGate gate;
     private final ObjectMapper mapper = new ObjectMapper();
 
-    public CollectionsApi(SaveItem saveItem, RemoveItem removeItem, ListItems listItems, SecurityGate gate) {
-        this.saveItem = saveItem;
-        this.removeItem = removeItem;
-        this.listItems = listItems;
+    public CollectionsApi(CollectionService collections, SecurityGate gate) {
+        this.collections = collections;
         this.gate = gate;
     }
 
@@ -68,14 +57,12 @@ public class CollectionsApi implements HttpService {
             refuse(res, Status.UNAUTHORIZED_401, "UNAUTHENTICATED");
             return;
         }
-        String tooLong = tooLongSegmentOf(req);
-        if (tooLong != null) {
-            refuse(res, Status.BAD_REQUEST_400, tooLong);
-            return;
+        switch (collections.save(caller.get().userId(), param(req, "collection"), param(req, "itemType"),
+                param(req, "itemId"))) {
+            case CollectionService.Saving.Saved saved -> res.status(Status.CREATED_201).send();
+            case CollectionService.Saving.AlreadySaved already -> res.status(Status.OK_200).send();
+            case CollectionService.Saving.TooLong tooLong -> refuse(res, Status.BAD_REQUEST_400, tooLong.code());
         }
-        SaveItem.Status status = saveItem.execute(caller.get().userId(),
-                req.path().pathParameters().get("collection"), itemOf(req));
-        res.status(status == SaveItem.Status.SAVED ? Status.CREATED_201 : Status.OK_200).send();
     }
 
     private void remove(ServerRequest req, ServerResponse res) {
@@ -84,17 +71,11 @@ public class CollectionsApi implements HttpService {
             refuse(res, Status.UNAUTHORIZED_401, "UNAUTHENTICATED");
             return;
         }
-        String tooLong = tooLongSegmentOf(req);
-        if (tooLong != null) {
-            refuse(res, Status.BAD_REQUEST_400, tooLong);
-            return;
-        }
-        RemoveItem.Status status = removeItem.execute(user.get(),
-                req.path().pathParameters().get("collection"), itemOf(req));
-        if (status == RemoveItem.Status.REMOVED) {
-            res.status(Status.NO_CONTENT_204).send();
-        } else {
-            refuse(res, Status.NOT_FOUND_404, "NOT_SAVED");
+        switch (collections.remove(user.get(), param(req, "collection"), param(req, "itemType"),
+                param(req, "itemId"))) {
+            case CollectionService.Removal.Removed removed -> res.status(Status.NO_CONTENT_204).send();
+            case CollectionService.Removal.NotSaved notSaved -> refuse(res, Status.NOT_FOUND_404, "NOT_SAVED");
+            case CollectionService.Removal.TooLong tooLong -> refuse(res, Status.BAD_REQUEST_400, tooLong.code());
         }
     }
 
@@ -104,12 +85,16 @@ public class CollectionsApi implements HttpService {
             refuse(res, Status.UNAUTHORIZED_401, "UNAUTHENTICATED");
             return;
         }
-        if (!fitsCollection(req)) {
-            refuse(res, Status.BAD_REQUEST_400, "COLLECTION_TOO_LONG");
-            return;
+        List<ItemRef> items;
+        switch (collections.list(user.get(), param(req, "collection"))) {
+            case CollectionService.Listing.TooLong tooLong -> {
+                refuse(res, Status.BAD_REQUEST_400, tooLong.code());
+                return;
+            }
+            case CollectionService.Listing.Listed listed -> items = listed.items();
         }
         ArrayNode array = mapper.createArrayNode();
-        for (ItemRef item : listItems.execute(user.get(), req.path().pathParameters().get("collection"))) {
+        for (ItemRef item : items) {
             array.addObject().put("itemType", item.itemType()).put("itemId", item.itemId());
         }
         try {
@@ -130,31 +115,16 @@ public class CollectionsApi implements HttpService {
                 .send("{\"status\":\"" + code + "\"}");
     }
 
-    private static boolean fitsCollection(ServerRequest req) {
-        return req.path().pathParameters().get("collection").length() <= MAX_COLLECTION_LENGTH;
-    }
 
     /**
      * Which segment of the item path is wider than its column, as the code the caller is given —
      * null when they all fit. Three causes that used to share one bodiless 400, so a client could
      * tell a mistyped collection from a pasted URL only by measuring the path itself.
      */
-    private static String tooLongSegmentOf(ServerRequest req) {
-        if (!fitsCollection(req)) {
-            return "COLLECTION_TOO_LONG";
-        }
-        if (req.path().pathParameters().get("itemType").length() > MAX_ITEM_TYPE_LENGTH) {
-            return "ITEM_TYPE_TOO_LONG";
-        }
-        if (req.path().pathParameters().get("itemId").length() > MAX_ITEM_ID_LENGTH) {
-            return "ITEM_ID_TOO_LONG";
-        }
-        return null;
-    }
 
-    private static ItemRef itemOf(ServerRequest req) {
-        return new ItemRef(req.path().pathParameters().get("itemType"),
-                req.path().pathParameters().get("itemId"));
+
+    private static String param(ServerRequest req, String name) {
+        return req.path().pathParameters().get(name);
     }
 
     private Optional<Caller> authenticate(ServerRequest req) {

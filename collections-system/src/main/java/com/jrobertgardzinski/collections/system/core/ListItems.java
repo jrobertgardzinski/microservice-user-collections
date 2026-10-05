@@ -1,8 +1,8 @@
-package com.jrobertgardzinski.collections.application;
+package com.jrobertgardzinski.collections.system.core;
 
-import com.jrobertgardzinski.collections.domain.CollectionRepository;
+import com.jrobertgardzinski.collections.domain.core.CollectionRepository;
 import com.jrobertgardzinski.identity.UserId;
-import com.jrobertgardzinski.collections.domain.ItemRef;
+import com.jrobertgardzinski.collections.domain.core.ItemRef;
 
 import java.util.List;
 

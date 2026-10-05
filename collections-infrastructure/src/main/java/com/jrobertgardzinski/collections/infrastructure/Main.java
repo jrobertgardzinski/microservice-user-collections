@@ -1,15 +1,16 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
-import com.jrobertgardzinski.collections.domain.Observation;
+import com.jrobertgardzinski.collections.application.core.CollectionService;
+import com.jrobertgardzinski.collections.domain.erasure.Observation;
 import com.jrobertgardzinski.observation.Observations;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.jrobertgardzinski.collections.application.ListItems;
-import com.jrobertgardzinski.collections.system.PurgeDeletedItem;
-import com.jrobertgardzinski.collections.system.MarkUserItemsForErasure;
-import com.jrobertgardzinski.collections.system.PurgeUserItems;
-import com.jrobertgardzinski.collections.system.RestoreUserItems;
-import com.jrobertgardzinski.collections.application.RemoveItem;
-import com.jrobertgardzinski.collections.application.SaveItem;
+import com.jrobertgardzinski.collections.system.core.ListItems;
+import com.jrobertgardzinski.collections.system.core.PurgeDeletedItem;
+import com.jrobertgardzinski.collections.system.erasure.MarkUserItemsForErasure;
+import com.jrobertgardzinski.collections.system.erasure.PurgeUserItems;
+import com.jrobertgardzinski.collections.system.erasure.RestoreUserItems;
+import com.jrobertgardzinski.collections.system.core.RemoveItem;
+import com.jrobertgardzinski.collections.system.core.SaveItem;
 import io.helidon.webserver.WebServer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -297,7 +298,7 @@ public final class Main {
         ExportedObservations observations = new ExportedObservations();
 
         CollectionsApi collections = new CollectionsApi(
-                new SaveItem(store), new RemoveItem(store), new ListItems(store), gate);
+                new CollectionService(new SaveItem(store), new RemoveItem(store), new ListItems(store)), gate);
 
         // the account-deletion saga's third participant: consume purge commands off Kafka when a
         // broker is configured (on a daemon virtual thread); without one, this simply never runs —
@@ -318,8 +319,8 @@ public final class Main {
             // is no saga, so there are no marks and nothing to watch (the same coupling the two
             // Spring participants get for free from @EnableScheduling)
             ErasureBacklogWatch backlogWatch = new ErasureBacklogWatch(
-                    new com.jrobertgardzinski.collections.system.WatchErasureBacklog(
-                            erasure, com.jrobertgardzinski.collections.config.ErasureTolerance.DEFAULT,
+                    new com.jrobertgardzinski.collections.system.erasure.WatchErasureBacklog(
+                            erasure, com.jrobertgardzinski.collections.config.erasure.ErasureTolerance.DEFAULT,
                             observations, Clock.systemUTC()));
             Thread.ofVirtual().name("erasure-backlog-watch").start(() -> {
                 while (!Thread.currentThread().isInterrupted()) {

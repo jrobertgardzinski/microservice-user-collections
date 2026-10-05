@@ -1,4 +1,10 @@
-package com.jrobertgardzinski.collections.domain;
+package com.jrobertgardzinski.collections.domain.erasure;
+
+import com.jrobertgardzinski.collections.domain.core.CollectionRepository;
+import com.jrobertgardzinski.collections.domain.core.ItemRef;
+import com.jrobertgardzinski.collections.domain.core.ItemReferences;
+import com.jrobertgardzinski.collections.domain.core.ItemStatus;
+import com.jrobertgardzinski.collections.domain.core.SavedItem;
 
 import com.jrobertgardzinski.identity.UserId;
 

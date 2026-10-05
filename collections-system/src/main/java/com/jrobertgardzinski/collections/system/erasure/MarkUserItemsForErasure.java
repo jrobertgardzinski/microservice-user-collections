@@ -1,15 +1,15 @@
-package com.jrobertgardzinski.collections.system;
+package com.jrobertgardzinski.collections.system.erasure;
 
-import com.jrobertgardzinski.collections.domain.ItemErasure;
+import com.jrobertgardzinski.collections.domain.erasure.ItemErasure;
 import com.jrobertgardzinski.identity.UserId;
-import com.jrobertgardzinski.collections.domain.SavedItem;
+import com.jrobertgardzinski.collections.domain.core.SavedItem;
 
 import java.time.Clock;
 import java.time.Instant;
 
 /**
  * This service's REVERSIBLE step of an account deletion: every reference the leaver still has in a
- * collection is marked {@link com.jrobertgardzinski.collections.domain.ItemStatus#PENDING_ERASURE}.
+ * collection is marked {@link com.jrobertgardzinski.collections.domain.core.ItemStatus#PENDING_ERASURE}.
  * Nothing is destroyed — and that is the entire point: this is the step the orchestrator can take
  * back when a LATER participant of the same saga fails ({@link RestoreUserItems}).
  *

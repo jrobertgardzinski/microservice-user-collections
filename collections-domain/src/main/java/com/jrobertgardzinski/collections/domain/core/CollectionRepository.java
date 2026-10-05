@@ -1,4 +1,4 @@
-package com.jrobertgardzinski.collections.domain;
+package com.jrobertgardzinski.collections.domain.core;
 
 import com.jrobertgardzinski.identity.UserId;
 

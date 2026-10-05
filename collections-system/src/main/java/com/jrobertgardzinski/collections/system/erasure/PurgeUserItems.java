@@ -1,6 +1,6 @@
-package com.jrobertgardzinski.collections.system;
+package com.jrobertgardzinski.collections.system.erasure;
 
-import com.jrobertgardzinski.collections.domain.ItemErasure;
+import com.jrobertgardzinski.collections.domain.erasure.ItemErasure;
 import com.jrobertgardzinski.identity.UserId;
 /**
  * The IRREVERSIBLE half of the account-deletion axis for this service: everything the leaver saved

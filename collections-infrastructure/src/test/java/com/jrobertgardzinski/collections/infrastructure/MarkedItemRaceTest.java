@@ -2,8 +2,8 @@ package com.jrobertgardzinski.collections.infrastructure;
 
 import static com.jrobertgardzinski.collections.application.TestUsers.u;
 import com.jrobertgardzinski.identity.UserId;
-import com.jrobertgardzinski.collections.system.PurgeDeletedItem;
-import com.jrobertgardzinski.collections.system.PurgeUserItems;
+import com.jrobertgardzinski.collections.system.core.PurgeDeletedItem;
+import com.jrobertgardzinski.collections.system.erasure.PurgeUserItems;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import io.qameta.allure.Epic;
@@ -40,8 +40,8 @@ import static org.junit.jupiter.api.Assertions.fail;
  *
  * <p><strong>Why this test does not chase a deadlock the way that one does.</strong> Checked in
  * {@code Main.java}: neither {@link PurgeUserItems} nor {@link PurgeDeletedItem} is wrapped in a
- * transaction spanning more than one statement — {@link com.jrobertgardzinski.collections.domain.ItemErasure#eraseMarked}
- * and {@link com.jrobertgardzinski.collections.domain.ItemReferences#purge} are each ONE
+ * transaction spanning more than one statement — {@link com.jrobertgardzinski.collections.domain.erasure.ItemErasure#eraseMarked}
+ * and {@link com.jrobertgardzinski.collections.domain.core.ItemReferences#purge} are each ONE
  * {@code DELETE}, auto-committed on its own. A single statement cannot be paused between "locked
  * row A" and "about to lock row B" from outside — there is no seam a test can hook, unlike
  * {@code PurgeUserComments}, which visibly runs {@code purgeVoter} then {@code purgeComment} as two
@@ -95,8 +95,8 @@ class MarkedItemRaceTest {
         // leaver's own meme, saved by its own author AND by a fan — the row a running saga has
         // reserved (marked_for_erasure_at set) is exactly the row the cascade would destroy anyway,
         // because the cascade's WHERE clause never looks at status (see JdbcCollectionRepository#purge)
-        store.add(LEAVER, "favourites", new com.jrobertgardzinski.collections.domain.ItemRef("meme", MEME));
-        store.add(FAN, "favourites", new com.jrobertgardzinski.collections.domain.ItemRef("meme", MEME));
+        store.add(LEAVER, "favourites", new com.jrobertgardzinski.collections.domain.core.ItemRef("meme", MEME));
+        store.add(FAN, "favourites", new com.jrobertgardzinski.collections.domain.core.ItemRef("meme", MEME));
         markLeaversItemForErasure();
     }
 

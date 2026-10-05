@@ -1,4 +1,4 @@
-package com.jrobertgardzinski.collections.config;
+package com.jrobertgardzinski.collections.config.erasure;
 
 import java.time.Duration;
 import java.time.Instant;

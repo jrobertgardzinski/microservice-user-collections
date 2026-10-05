@@ -1,16 +1,16 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
 import com.jrobertgardzinski.identity.UserId;
-import com.jrobertgardzinski.collections.domain.Observation;
+import com.jrobertgardzinski.collections.domain.erasure.Observation;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jrobertgardzinski.observation.Observations;
-import com.jrobertgardzinski.collections.domain.CollectionRepository;
-import com.jrobertgardzinski.collections.domain.ItemErasure;
-import com.jrobertgardzinski.collections.system.MarkUserItemsForErasure;
-import com.jrobertgardzinski.collections.system.PurgeUserItems;
-import com.jrobertgardzinski.collections.system.RestoreUserItems;
-import com.jrobertgardzinski.collections.domain.ItemRef;
-import com.jrobertgardzinski.collections.domain.SavedItem;
+import com.jrobertgardzinski.collections.domain.core.CollectionRepository;
+import com.jrobertgardzinski.collections.domain.erasure.ItemErasure;
+import com.jrobertgardzinski.collections.system.erasure.MarkUserItemsForErasure;
+import com.jrobertgardzinski.collections.system.erasure.PurgeUserItems;
+import com.jrobertgardzinski.collections.system.erasure.RestoreUserItems;
+import com.jrobertgardzinski.collections.domain.core.ItemRef;
+import com.jrobertgardzinski.collections.domain.core.SavedItem;
 import io.qameta.allure.Epic;
 import io.qameta.allure.Feature;
 import org.junit.jupiter.api.Test;

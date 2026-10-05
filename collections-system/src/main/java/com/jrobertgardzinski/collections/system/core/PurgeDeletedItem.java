@@ -1,6 +1,6 @@
-package com.jrobertgardzinski.collections.system;
+package com.jrobertgardzinski.collections.system.core;
 
-import com.jrobertgardzinski.collections.domain.ItemReferences;
+import com.jrobertgardzinski.collections.domain.core.ItemReferences;
 import java.util.List;
 
 /**

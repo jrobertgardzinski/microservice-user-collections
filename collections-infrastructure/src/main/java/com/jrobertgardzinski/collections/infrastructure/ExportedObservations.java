@@ -1,7 +1,7 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
 import com.jrobertgardzinski.observation.Observations;
-import com.jrobertgardzinski.collections.domain.Observation;
+import com.jrobertgardzinski.collections.domain.erasure.Observation;
 
 import java.util.concurrent.atomic.AtomicLong;
 

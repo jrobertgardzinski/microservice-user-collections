@@ -1,4 +1,4 @@
-package com.jrobertgardzinski.collections.domain;
+package com.jrobertgardzinski.collections.domain.core;
 
 /**
  * Whether a saved reference is part of its owner's list or is waiting to be erased — the same two

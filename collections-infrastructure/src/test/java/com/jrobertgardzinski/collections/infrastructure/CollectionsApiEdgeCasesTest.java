@@ -1,9 +1,10 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
-import com.jrobertgardzinski.collections.domain.FakeCollectionRepository;
-import com.jrobertgardzinski.collections.application.ListItems;
-import com.jrobertgardzinski.collections.application.RemoveItem;
-import com.jrobertgardzinski.collections.application.SaveItem;
+import com.jrobertgardzinski.collections.application.core.CollectionService;
+import com.jrobertgardzinski.collections.domain.erasure.FakeCollectionRepository;
+import com.jrobertgardzinski.collections.system.core.ListItems;
+import com.jrobertgardzinski.collections.system.core.RemoveItem;
+import com.jrobertgardzinski.collections.system.core.SaveItem;
 import io.helidon.webserver.WebServer;
 import io.qameta.allure.Epic;
 import io.qameta.allure.Feature;
@@ -44,7 +45,7 @@ class CollectionsApiEdgeCasesTest {
         SecurityGate gate = token -> VALID_TOKEN.equals(token)
                 ? Optional.of(new Caller("alice@example.com", com.jrobertgardzinski.identity.UserId.random())) : Optional.empty();
         CollectionsApi api = new CollectionsApi(
-                new SaveItem(store), new RemoveItem(store), new ListItems(store), gate);
+                new CollectionService(new SaveItem(store), new RemoveItem(store), new ListItems(store)), gate);
         server = WebServer.builder()
                 .port(0)
                 .routing(routing -> routing.register("/collections", api))

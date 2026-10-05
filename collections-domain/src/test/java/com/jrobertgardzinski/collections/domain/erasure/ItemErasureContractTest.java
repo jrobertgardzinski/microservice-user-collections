@@ -1,4 +1,7 @@
-package com.jrobertgardzinski.collections.domain;
+package com.jrobertgardzinski.collections.domain.erasure;
+
+import com.jrobertgardzinski.collections.domain.core.ItemRef;
+import com.jrobertgardzinski.collections.domain.core.SavedItem;
 
 import com.jrobertgardzinski.identity.UserId;
 import org.junit.jupiter.api.DisplayName;

@@ -2,15 +2,15 @@ package com.jrobertgardzinski.collections.infrastructure;
 
 import static com.jrobertgardzinski.collections.application.TestUsers.u;
 import com.jrobertgardzinski.identity.UserId;
-import com.jrobertgardzinski.collections.domain.FakeCollectionRepository;
-import com.jrobertgardzinski.collections.domain.Observation;
+import com.jrobertgardzinski.collections.domain.erasure.FakeCollectionRepository;
+import com.jrobertgardzinski.collections.domain.erasure.Observation;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
-import com.jrobertgardzinski.collections.domain.ItemErasure;
-import com.jrobertgardzinski.collections.system.MarkUserItemsForErasure;
-import com.jrobertgardzinski.collections.domain.ItemRef;
-import com.jrobertgardzinski.collections.domain.SavedItem;
+import com.jrobertgardzinski.collections.domain.erasure.ItemErasure;
+import com.jrobertgardzinski.collections.system.erasure.MarkUserItemsForErasure;
+import com.jrobertgardzinski.collections.domain.core.ItemRef;
+import com.jrobertgardzinski.collections.domain.core.SavedItem;
 import io.qameta.allure.Epic;
 import io.qameta.allure.Feature;
 import org.junit.jupiter.api.AfterEach;
@@ -70,11 +70,11 @@ class ErasureBacklogWatchTest {
 
     /** The real chain: the use case decides, this class only runs it and reports what it decided. */
     private static ErasureBacklogWatch watching(
-            com.jrobertgardzinski.collections.domain.ItemErasure erasure, Instant now) {
+            com.jrobertgardzinski.collections.domain.erasure.ItemErasure erasure, Instant now) {
         return new ErasureBacklogWatch(
-                new com.jrobertgardzinski.collections.system.WatchErasureBacklog(
+                new com.jrobertgardzinski.collections.system.erasure.WatchErasureBacklog(
                         erasure,
-                        new com.jrobertgardzinski.collections.config.ErasureTolerance(
+                        new com.jrobertgardzinski.collections.config.erasure.ErasureTolerance(
                                 Duration.ofMinutes(30)),
                         com.jrobertgardzinski.observation.Observations.<Observation>silent(),
                         Clock.fixed(now, ZoneOffset.UTC)));

@@ -1,8 +1,8 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
-import com.jrobertgardzinski.collections.domain.ItemErasure;
-import com.jrobertgardzinski.collections.domain.ItemErasureContractTest;
-import com.jrobertgardzinski.collections.domain.ItemRef;
+import com.jrobertgardzinski.collections.domain.erasure.ItemErasure;
+import com.jrobertgardzinski.collections.domain.erasure.ItemErasureContractTest;
+import com.jrobertgardzinski.collections.domain.core.ItemRef;
 import com.jrobertgardzinski.identity.UserId;
 
 import com.zaxxer.hikari.HikariConfig;

@@ -1,10 +1,10 @@
-package com.jrobertgardzinski.collections.system;
+package com.jrobertgardzinski.collections.system.erasure;
 
-import com.jrobertgardzinski.collections.domain.ItemErasure;
+import com.jrobertgardzinski.collections.domain.erasure.ItemErasure;
 import com.jrobertgardzinski.observation.Observations;
-import com.jrobertgardzinski.collections.config.ErasureTolerance;
-import com.jrobertgardzinski.collections.domain.Observation;
-import com.jrobertgardzinski.collections.domain.SavedItem;
+import com.jrobertgardzinski.collections.config.erasure.ErasureTolerance;
+import com.jrobertgardzinski.collections.domain.erasure.Observation;
+import com.jrobertgardzinski.collections.domain.core.SavedItem;
 
 import java.time.Clock;
 import java.time.Duration;

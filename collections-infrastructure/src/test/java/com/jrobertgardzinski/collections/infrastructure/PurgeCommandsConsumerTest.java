@@ -1,19 +1,19 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
 import static com.jrobertgardzinski.collections.application.TestUsers.u;
-import com.jrobertgardzinski.collections.domain.FakeCollectionRepository;
+import com.jrobertgardzinski.collections.domain.erasure.FakeCollectionRepository;
 import com.jrobertgardzinski.collections.closure.CollectionsClosureParticipant;
-import com.jrobertgardzinski.collections.domain.Observation;
+import com.jrobertgardzinski.collections.domain.erasure.Observation;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jrobertgardzinski.observation.Observations;
-import com.jrobertgardzinski.collections.system.MarkUserItemsForErasure;
-import com.jrobertgardzinski.collections.system.PurgeUserItems;
-import com.jrobertgardzinski.collections.system.RestoreUserItems;
-import com.jrobertgardzinski.collections.domain.ItemRef;
+import com.jrobertgardzinski.collections.system.erasure.MarkUserItemsForErasure;
+import com.jrobertgardzinski.collections.system.erasure.PurgeUserItems;
+import com.jrobertgardzinski.collections.system.erasure.RestoreUserItems;
+import com.jrobertgardzinski.collections.domain.core.ItemRef;
 import io.qameta.allure.Epic;
 import io.qameta.allure.Feature;
 import io.qameta.allure.Story;

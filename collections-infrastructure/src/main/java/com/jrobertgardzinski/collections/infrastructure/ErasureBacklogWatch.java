@@ -1,7 +1,7 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
-import com.jrobertgardzinski.collections.system.WatchErasureBacklog;
-import com.jrobertgardzinski.collections.domain.Observation;
+import com.jrobertgardzinski.collections.system.erasure.WatchErasureBacklog;
+import com.jrobertgardzinski.collections.domain.erasure.Observation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

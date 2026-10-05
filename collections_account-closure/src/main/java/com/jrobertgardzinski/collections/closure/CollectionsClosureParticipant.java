@@ -3,10 +3,10 @@ package com.jrobertgardzinski.collections.closure;
 import com.jrobertgardzinski.closure.ClosureCommand;
 import com.jrobertgardzinski.closure.ClosureOutcome;
 import com.jrobertgardzinski.closure.ClosureParticipant;
-import com.jrobertgardzinski.collections.system.MarkUserItemsForErasure;
-import com.jrobertgardzinski.collections.system.PurgeUserItems;
-import com.jrobertgardzinski.collections.system.RestoreUserItems;
-import com.jrobertgardzinski.collections.domain.Observation;
+import com.jrobertgardzinski.collections.system.erasure.MarkUserItemsForErasure;
+import com.jrobertgardzinski.collections.system.erasure.PurgeUserItems;
+import com.jrobertgardzinski.collections.system.erasure.RestoreUserItems;
+import com.jrobertgardzinski.collections.domain.erasure.Observation;
 import com.jrobertgardzinski.identity.UserId;
 import com.jrobertgardzinski.observation.Observations;
 

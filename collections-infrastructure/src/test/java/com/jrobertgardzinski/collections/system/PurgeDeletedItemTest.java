@@ -1,8 +1,10 @@
 package com.jrobertgardzinski.collections.system;
 
-import com.jrobertgardzinski.collections.domain.FakeCollectionRepository;
+import com.jrobertgardzinski.collections.system.core.PurgeDeletedItem;
+
+import com.jrobertgardzinski.collections.domain.erasure.FakeCollectionRepository;
 import static com.jrobertgardzinski.collections.application.TestUsers.u;
-import com.jrobertgardzinski.collections.domain.ItemRef;
+import com.jrobertgardzinski.collections.domain.core.ItemRef;
 import io.qameta.allure.Epic;
 import io.qameta.allure.Feature;
 import org.junit.jupiter.api.BeforeEach;

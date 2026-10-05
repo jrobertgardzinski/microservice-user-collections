@@ -1,6 +1,6 @@
 package com.jrobertgardzinski.collections.deletion;
 
-import com.jrobertgardzinski.collections.system.PurgeDeletedItem;
+import com.jrobertgardzinski.collections.system.core.PurgeDeletedItem;
 import com.jrobertgardzinski.deletion.CommentsDeleted;
 import com.jrobertgardzinski.deletion.DeletionOutcome;
 import com.jrobertgardzinski.deletion.MemeDeleted;

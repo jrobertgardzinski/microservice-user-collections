@@ -1,8 +1,8 @@
-package com.jrobertgardzinski.collections.system;
+package com.jrobertgardzinski.collections.system.erasure;
 
-import com.jrobertgardzinski.collections.domain.ItemErasure;
+import com.jrobertgardzinski.collections.domain.erasure.ItemErasure;
 import com.jrobertgardzinski.identity.UserId;
-import com.jrobertgardzinski.collections.domain.SavedItem;
+import com.jrobertgardzinski.collections.domain.core.SavedItem;
 
 /**
  * The compensation: every reference this service reserved for a leaver goes back into their lists,

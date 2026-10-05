@@ -1,9 +1,9 @@
 package com.jrobertgardzinski.collections.infrastructure;
 
-import com.jrobertgardzinski.collections.domain.CollectionRepository;
-import com.jrobertgardzinski.collections.domain.ItemRef;
-import com.jrobertgardzinski.collections.domain.ItemReferences;
-import com.jrobertgardzinski.collections.domain.ItemStatus;
+import com.jrobertgardzinski.collections.domain.core.CollectionRepository;
+import com.jrobertgardzinski.collections.domain.core.ItemRef;
+import com.jrobertgardzinski.collections.domain.core.ItemReferences;
+import com.jrobertgardzinski.collections.domain.core.ItemStatus;
 import com.jrobertgardzinski.identity.UserId;
 
 import javax.sql.DataSource;

@@ -1,4 +1,4 @@
-package com.jrobertgardzinski.collections.domain;
+package com.jrobertgardzinski.collections.domain.core;
 
 /**
  * An opaque reference to a saved thing: its type (e.g. {@code "meme"}, {@code "comment"}) and its
