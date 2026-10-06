@@ -12,7 +12,7 @@ saved references down (the cascade's purge and the leaver's rows); `collections-
 the bridge the HTTP API calls, `CollectionService`, which turns the names a caller sent into the
 domain and refuses one no column could hold. Since 2026-10-05 the layers mean what they mean in
 `microservice-security`. Inside every layer the classes sit in one package per area — core,
-erasure — and `AreaBoundariesTest` holds the graph of which area may import which.
+erasure. An area sees only itself and core, and the layers point down; `AreaIsolationTest` (ArchUnit) checks both on the compiled classes.
 
 Beside them sit `collections_account-closure` and `collections_meme-deletion`: not layers, but
 this service's parts in TWO cross-service processes — what happens to a person's saved references
